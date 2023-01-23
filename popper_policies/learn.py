@@ -242,8 +242,6 @@ def _popper_programs_to_policy(popper_programs, domain):
                 conditions.append((pred_str, pred_arg_strs))
             rule = _create_ldl_rule(conditions, action, domain)
             print(rule)
-            import ipdb
-            ipdb.set_trace()
             policy_rules.append(rule)
     return LiftedDecisionList(policy_rules)
 
@@ -293,7 +291,7 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
     }
 
     def _sub(predicate: PyperplanPredicate) -> PyperplanPredicate:
-        orig_signature = domain.predicates[predicate.name].signature
+        orig_signature = predicate.signature
         new_signature = [(sub[p], t) for p, t in orig_signature]
         return PyperplanPredicate(predicate.name, new_signature)
 
