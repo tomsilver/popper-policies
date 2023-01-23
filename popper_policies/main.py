@@ -3,10 +3,12 @@
 import logging
 import sys
 import time
+from typing import List, Tuple
 
 from popper_policies import utils
 from popper_policies.envs import create_tasks
 from popper_policies.flags import FLAGS, parse_flags
+from popper_policies.structs import Plan, Task
 
 
 def _main() -> None:
@@ -32,7 +34,16 @@ def _main() -> None:
         num_eval=FLAGS.num_eval_tasks,
     )
 
-    del train_tasks, eval_tasks
+    # Create plans for learning using train tasks.
+    logging.info("Creating demos for policy learning.")
+    demos: List[Tuple[Task, Plan]] = []
+    for task in train_tasks:
+        plan, _ = utils.run_planning(task, planner=FLAGS.planner)
+        assert plan is not None, "Planning failed"
+        demo = (task, plan)
+        demos.append(demo)
+
+    del eval_tasks, demos
 
     script_time = time.time() - script_start
     logging.info(f"\n\nMain script terminated in {script_time:.5f} seconds")
