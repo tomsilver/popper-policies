@@ -5,7 +5,7 @@ import tempfile
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 
 from pyperplan.grounding import ground as pyperplan_ground
 from pyperplan.pddl.parser import Parser
@@ -81,6 +81,8 @@ Plan = List[str]
 TaskMetrics = Dict[str, Any]
 # Maps a task string identifier to task metrics.
 Metrics = Dict[str, TaskMetrics]
+
+StateGoalAction = Tuple[Set[PyperplanPredicate], Set[PyperplanPredicate], str]
 
 
 @dataclass(frozen=True)

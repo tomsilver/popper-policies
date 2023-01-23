@@ -4,10 +4,10 @@ import logging
 import tempfile
 from collections import defaultdict
 from pathlib import Path
-from typing import DefaultDict, List, Set, Tuple
+from typing import DefaultDict, List, Optional, Set, Tuple
 
 from popper_policies import utils
-from popper_policies.structs import Plan, Task
+from popper_policies.structs import Plan, StateGoalAction, Task
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -28,8 +28,14 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     actions = sorted(action_set)
     logging.info(f"Found actions in plans: {actions}")
 
+    # Convert the plans into state-goal-action triplets.
+    demo_state_goal_actions = []
+    for task, plan in zip(tasks, plan_strs):
+        for state, goal, action in utils.plan_to_trajectory(task, plan):
+            demo_state_goal_actions.append((state, goal, action))
+
     # The background knowledge is constant across all actions.
-    bk_str = _create_background_knowledge(tasks)
+    bk_str = _create_background_knowledge(demo_state_goal_actions)
     logging.debug(f"Created background string:\n{bk_str}")
 
     for action in actions:
@@ -54,7 +60,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(bk_str)
 
             # Create the examples (exs) file.
-            examples_str = _create_examples(tasks, plan_strs, action)
+            examples_str = _create_examples(demo_state_goal_actions, tasks,
+                                            action)
             logging.debug(f"Created examples string:\n{examples_str}")
             examples_file = temp_dir_path / "exs.pl"
             with open(examples_file, "w", encoding="utf-8") as f:
@@ -95,37 +102,47 @@ def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
 head_pred({action_name},{action_arity+1}).
 """
 
-def _atom_str_to_prolog_str(atom_str: str, task_id: int) -> str:
-    """Reformat atom string to include the task id, and remove spaces."""
+
+def _atom_str_to_prolog_str(atom_str: str,
+                            example_id: int,
+                            wrapper: Optional[str] = None) -> str:
+    """Reformat atom string to include the example id, and remove spaces."""
+    assert atom_str.startswith("(")
+    name, remainder = atom_str[1:].split(" ", 1)
+    s = f"{name}({remainder}"
     # Remove spaces.
-    s = atom_str.replace(" ", ",")
+    s = s.replace(" ", ",")
     # Add task id.
     assert s.endswith(")")
-    s = f"{s[:-1]},{task_id})"
+    s = f"{s[:-1]},{example_id})"
+    if wrapper is not None:
+        s = f"{wrapper}({s})"
+    s += "."
     return s
 
 
-def _create_background_knowledge(tasks: List[Task]) -> str:
+def _create_background_knowledge(
+        demo_state_goal_actions: List[StateGoalAction]) -> str:
     """Returns the content of a Popper background knowledge file."""
     # Prolog complains if the file is not organized by predicate.
     pred_to_strs: DefaultDict[Tuple[str, int], Set[str]] = defaultdict(set)
 
-    for task_id, task in enumerate(tasks):
-        for atom in task.problem.initial_state:
+    for example_id, (state, goal, _) in enumerate(demo_state_goal_actions):
+        for atom in state:
             name = atom.name
             arity = len(atom.signature)
             pred = (name, arity)
             pred_str = utils.pred_to_str(atom)
-            prolog_str = _atom_str_to_prolog_str(pred_str, task_id)
+            prolog_str = _atom_str_to_prolog_str(pred_str, example_id)
             pred_to_strs[pred].add(prolog_str)
 
-        for atom in task.problem.goal:
+        for atom in goal:
             name = atom.name
             goal_name = "goal_" + atom.name
             arity = len(atom.signature)
             pred = (goal_name, arity)
             pred_str = utils.pred_to_str(atom).replace(name, goal_name, 1)
-            prolog_str = _atom_str_to_prolog_str(pred_str, task_id)
+            prolog_str = _atom_str_to_prolog_str(pred_str, example_id)
             pred_to_strs[pred].add(prolog_str)
 
     # Finalize background knowledge.
@@ -136,16 +153,14 @@ def _create_background_knowledge(tasks: List[Task]) -> str:
     return bk_str
 
 
-def _create_examples(tasks: List[Task], plan_strs: List[Plan],
-                     action: Tuple[str, int]) -> str:
+def _create_examples(demo_state_goal_actions: List[StateGoalAction],
+                     tasks: List[Task], action: Tuple[str, int]) -> str:
     """Returns the content of a Popper examples file.
 
     Currently makes the (often incorrect!) assumption that there is only
     one "good" action for each (state, goal), i.e., the demonstrated
     action. All other possible actions are treated as negative examples.
     """
-    assert len(tasks) == len(plan_strs)
-    
     # Generate all possible actions for the sake of negative examples.
     # We may want to subsample in the future because this could get very big.
     all_possible_actions = set()
@@ -153,17 +168,28 @@ def _create_examples(tasks: List[Task], plan_strs: List[Plan],
         for op in task.pyperplan_task.operators:
             if not op.name.startswith(f"({action[0]}"):
                 continue
-            for task_id in range(len(tasks)):
-                action_str = _atom_str_to_prolog_str(op.name, task_id)
-                all_possible_actions.add(action_str)
+            all_possible_actions.add(op.name)
 
     pos_strs = set()
     neg_strs = set()
-    for task_id, task in enumerate(tasks):
-        plan = plan_strs[task_id]
-        for demo_action in plan:
-            import ipdb; ipdb.set_trace()
-    
+    for ex_id, (_, _, action) in enumerate(demo_state_goal_actions):
+        for other_action in all_possible_actions:
+            # Positive example
+            if action == other_action:
+                wrapper = "pos"
+                destination = pos_strs
+            # Negative example
+            else:
+                wrapper = "neg"
+                destination = neg_strs
+            prolog_str = _atom_str_to_prolog_str(other_action,
+                                                 ex_id,
+                                                 wrapper=wrapper)
+            destination.add(prolog_str)
+
+    pos_str = "\n".join(sorted(pos_strs))
+    neg_str = "\n".join(sorted(neg_strs))
+
     return f"""% Positive examples
 {pos_str}
 

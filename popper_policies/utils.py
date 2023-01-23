@@ -10,13 +10,13 @@ import tempfile
 import urllib.request
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from pyperplan.planner import HEURISTICS, SEARCHES, search_plan
 
 from popper_policies.flags import FLAGS
 from popper_policies.structs import Plan, PyperplanObject, PyperplanOperator, \
-    PyperplanPredicate, PyperplanType, Task, TaskMetrics
+    PyperplanPredicate, PyperplanType, StateGoalAction, Task, TaskMetrics
 
 # Global constants.
 _DIR = Path(__file__).parent
@@ -287,3 +287,11 @@ def advance_task(task: Task, action: str) -> Task:
 )"""
     new_task = Task(task.domain_str, new_problem_str)
     return new_task
+
+
+def plan_to_trajectory(task: Task, plan: Plan) -> Iterator[StateGoalAction]:
+    """Iterate state-goal-action triplets by running the plan in the task."""
+    goal = set(task.problem.goal)
+    for action in plan:
+        yield (set(task.problem.initial_state), goal, action)
+        task = advance_task(task, action)
