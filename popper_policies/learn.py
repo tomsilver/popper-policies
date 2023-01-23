@@ -1,11 +1,13 @@
 """Learn policies for PDDL domains using Popper (ILP system)."""
 
+from collections import defaultdict
 import logging
 import tempfile
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import DefaultDict, List, Set, Tuple
 
 from popper_policies.structs import Plan, Task
+from popper_policies import utils
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -26,6 +28,9 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     actions = sorted(action_set)
     logging.info(f"Found actions in plans: {actions}")
 
+    # The background knowledge is constant across all actions.
+    bk_str = _create_background_knowledge(tasks)
+
     for action in actions:
         logging.info(f"Learning rules for action: {action}")
 
@@ -42,7 +47,9 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(bias_str)
 
             # Create the background knowledge (bk) file.
-            import ipdb; ipdb.set_trace()
+            bk_file = temp_dir_path / "bk.pl"
+            with open(bk_file, "w", encoding="utf-8") as f:
+                f.write(bk_str)
 
             # Create the examples (exs) file.
             import ipdb; ipdb.set_trace()
@@ -81,3 +88,43 @@ def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
 % Action
 head_pred({action_name},{action_arity+1}).
 """
+
+
+def _create_background_knowledge(tasks: List[Task]) -> str:
+    """Returns the content of a Popper background knowledge file."""
+    # Prolog complains if the file is not organized by predicate.
+    pred_to_strs: DefaultDict[Tuple[str, int], Set[str]] = defaultdict(set)
+
+    # Reformat atom string to include the task id, and remove spaces.
+    def _atom_str_to_prolog_str(atom_str: str, task_id: int) -> str:
+        # Remove spaces.
+        s = atom_str.replace(" ", ",")
+        # Add task id.
+        assert s.endswith(")")
+        s = f"{s[:-1]},{task_id})"
+        return s
+    
+    for task_id, task in enumerate(tasks):
+        for atom in task.problem.initial_state:
+            name = atom.name
+            arity = len(atom.signature)
+            pred = (name, arity)
+            pred_str = utils.pred_to_str(atom)
+            prolog_str = _atom_str_to_prolog_str(pred_str, task_id)
+            pred_to_strs[pred].add(prolog_str)
+
+        for atom in task.problem.goal:
+            name = atom.name
+            goal_name = "goal_" + atom.name
+            arity = len(atom.signature)
+            pred = (goal_name, arity)
+            pred_str = utils.pred_to_str(atom).replace(name, goal_name, 1)
+            prolog_str = _atom_str_to_prolog_str(pred_str, task_id)
+            pred_to_strs[pred].add(prolog_str)
+
+    # Finalize background knowledge.
+    bk_str = ""
+    for pred in sorted(pred_to_strs):
+        bk_str += "\n".join(sorted(pred_to_strs[pred]))
+        bk_str += "\n"
+    return bk_str
