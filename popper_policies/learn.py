@@ -30,6 +30,7 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 
     # The background knowledge is constant across all actions.
     bk_str = _create_background_knowledge(tasks)
+    logging.debug(f"Created background string:\n{bk_str}")
 
     for action in actions:
         logging.info(f"Learning rules for action: {action}")
@@ -42,6 +43,7 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             # NOTE: Prolog complains if we introduce an unused predicate, so
             # just collect seen predicates from the problems themselves.
             bias_str = _create_bias(tasks, action)
+            logging.debug(f"Created bias string:\n{bias_str}")
             bias_file = temp_dir_path / "bias.pl"
             with open(bias_file, "w", encoding="utf-8") as f:
                 f.write(bias_str)
@@ -53,6 +55,7 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 
             # Create the examples (exs) file.
             examples_str = _create_examples(tasks, plan_strs, action)
+            logging.debug(f"Created examples string:\n{examples_str}")
             examples_file = temp_dir_path / "exs.pl"
             with open(examples_file, "w", encoding="utf-8") as f:
                 f.write(examples_str)
@@ -142,4 +145,5 @@ def _create_examples(tasks: List[Task], plan_strs: List[Plan],
     action. All other possible actions are treated as negative examples.
     """
     assert len(tasks) == len(plan_strs)
-    import ipdb; ipdb.set_trace()
+    import ipdb
+    ipdb.set_trace()

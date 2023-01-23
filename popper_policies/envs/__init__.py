@@ -17,6 +17,9 @@ def create_tasks(
     if env_name.startswith("pyperplan-"):
         benchmark_name = env_name[len("pyperplan-"):]
         tasks = _get_pyperplan_tasks(benchmark_name, total_num_tasks)
+    if env_name.startswith("custom-"):
+        benchmark_name = env_name[len("custom-"):]
+        tasks = _get_custom_tasks(benchmark_name, total_num_tasks)
     else:
         raise NotImplementedError(f"Unrecognized env: {env_name}.")
 
@@ -47,6 +50,21 @@ def _get_pyperplan_tasks(benchmark_name: str, num_tasks: int) -> List[Task]:
             assert "PDDL file not found" in str(e)
             raise ValueError(f"Could not download {problem_url}. "
                              "Too many tasks?")
+        task = Task(domain_str, problem_str)
+        tasks.append(task)
+    return tasks
+
+
+def _get_custom_tasks(benchmark_name: str, num_tasks: int) -> List[Task]:
+    """Get PDDL tasks that are custom-defined in this repository."""
+    domain_path = utils.PDDL_DIR / benchmark_name / "domain.pddl"
+    with open(domain_path, "r", encoding="utf-8") as f:
+        domain_str = f.read()
+    tasks = []
+    for task_num in range(1, num_tasks + 1):
+        problem_path = utils.PDDL_DIR / benchmark_name / f"task{task_num}.pddl"
+        with open(problem_path, "r", encoding="utf-8") as f:
+            problem_str = f.read()
         task = Task(domain_str, problem_str)
         tasks.append(task)
     return tasks
