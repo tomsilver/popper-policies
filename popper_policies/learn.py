@@ -4,6 +4,8 @@ import logging
 import tempfile
 from collections import defaultdict
 from pathlib import Path
+import os
+import subprocess
 from typing import DefaultDict, List, Optional, Set, Tuple
 
 from popper_policies import utils
@@ -66,6 +68,17 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             examples_file = temp_dir_path / "exs.pl"
             with open(examples_file, "w", encoding="utf-8") as f:
                 f.write(examples_str)
+
+            # Call popper.
+            logging.debug(f"Calling popper.")
+            # I would like to use the Python bindings, but it doesn't look
+            # possible right now. Maybe contribute this later.
+            popper_path = os.environ["POPPER_PATH"]
+            exec_str = os.path.join(popper_path, "popper.py")
+            cmd_str = f'"{exec_str}" {temp_dir}'
+            output = subprocess.getoutput(cmd_str)
+            logging.debug(f"Popper output:\n{output}")
+            import ipdb; ipdb.set_trace()
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
