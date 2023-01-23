@@ -2,6 +2,7 @@
 
 import functools
 import hashlib
+import itertools
 import logging
 import os
 import re
@@ -10,13 +11,15 @@ import tempfile
 import urllib.request
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Collection, Dict, FrozenSet, Iterator, List, \
+    Optional, Sequence, Set, Tuple
 
 from pyperplan.planner import HEURISTICS, SEARCHES, search_plan
 
 from popper_policies.flags import FLAGS
-from popper_policies.structs import Plan, PyperplanObject, PyperplanOperator, \
-    PyperplanPredicate, PyperplanType, StateGoalAction, Task, TaskMetrics
+from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
+    PyperplanObject, PyperplanOperator, PyperplanPredicate, PyperplanType, \
+    StateGoalAction, Task, TaskMetrics, _GroundLDLRule
 
 # Global constants.
 _DIR = Path(__file__).parent
@@ -204,9 +207,14 @@ def get_init_str(task: Task) -> str:
     return "\n".join(init_strs)
 
 
+def get_goal_strs(task: Task) -> List[str]:
+    """Returns the goal strings of a PDDL task."""
+    return [pred_to_str(p) for p in task.problem.goal]
+
+
 def get_goal_str(task: Task) -> str:
     """Returns the goal string of a PDDL task."""
-    goal_strs = [pred_to_str(p) for p in task.problem.goal]
+    goal_strs = get_goal_strs(task)
     goal_str = "\n".join(goal_strs)
     return goal_str
 
@@ -295,3 +303,58 @@ def plan_to_trajectory(task: Task, plan: Plan) -> Iterator[StateGoalAction]:
     for action in plan:
         yield (set(task.problem.initial_state), goal, action)
         task = advance_task(task, action)
+
+
+def all_ground_ldl_rules(
+        rule: LDLRule,
+        objects: Set[Tuple[str, PyperplanType]]) -> List[_GroundLDLRule]:
+    """Get all possible groundings of the given rule with the given objects."""
+    return _cached_all_ground_ldl_rules(rule, frozenset(objects))
+
+
+def get_object_combinations(
+        entities: Collection[Tuple[str, PyperplanType]],
+        types: Sequence[List[PyperplanType]]) -> Iterator[List[str]]:
+    """Get all combinations of entities satisfying the given types sequence."""
+    sorted_entities = sorted(entities)
+    choices = []
+    for vt in types:
+        this_choices = []
+        for (ent, et) in sorted_entities:
+            if any(et.name == t.name for t in vt):
+                this_choices.append(ent)
+        choices.append(this_choices)
+    for choice in itertools.product(*choices):
+        yield list(choice)
+
+
+@functools.lru_cache(maxsize=None)
+def _cached_all_ground_ldl_rules(
+    rule: LDLRule,
+    frozen_objects: FrozenSet[Tuple[str,
+                                    PyperplanType]]) -> List[_GroundLDLRule]:
+    """Helper for all_ground_ldl_rules() that caches the outputs."""
+    ground_rules = []
+    types = [t for _, t in rule.parameters]
+    for choice in get_object_combinations(frozen_objects, types):
+        ground_rule = rule.ground(tuple(choice))
+        ground_rules.append(ground_rule)
+    return ground_rules
+
+
+def query_ldl(ldl: LiftedDecisionList, atoms: Set[str],
+              objects: Set[Tuple[str, PyperplanType]],
+              goal: Set[str]) -> Optional[str]:
+    """Queries a lifted decision list representing a goal-conditioned policy.
+
+    Given an abstract state and goal, the rules are grounded in order. The
+    first applicable ground rule is used to return a ground action.
+
+    If no rule is applicable, returns None.
+    """
+    for rule in ldl.rules:
+        for ground_rule in all_ground_ldl_rules(rule, objects):
+            if ground_rule.state_preconditions.issubset(atoms) and \
+               ground_rule.goal_preconditions.issubset(goal):
+                return ground_rule.ground_operator
+    return None

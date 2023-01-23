@@ -9,7 +9,7 @@ from popper_policies import utils
 from popper_policies.envs import create_tasks
 from popper_policies.flags import FLAGS, parse_flags
 from popper_policies.learn import learn_policy
-from popper_policies.structs import Plan, Task
+from popper_policies.structs import LiftedDecisionList, Plan, Task
 
 
 def _main() -> None:
@@ -52,14 +52,37 @@ def _main() -> None:
         assert task.domain_str == domain_str
         problem_strs.append(task.problem_str)
         plan_strs.append(plan)
-    policy_str = learn_policy(domain_str, problem_strs, plan_strs)
-    logging.info(f"Learned policy:\n{policy_str}")
+    policy = learn_policy(domain_str, problem_strs, plan_strs)
+    logging.info(f"Learned policy:\n{policy}")
 
     # Evaluate the learned policy.
-    del eval_tasks
+    num_solved = 0
+    for task in eval_tasks:
+        solved = _evaluate_policy(task, policy)
+        if solved:
+            num_solved += 1
+    num_tasks = len(eval_tasks)
+    logging.info(f"Policy solved {num_solved} out of {num_tasks} eval tasks.")
 
     script_time = time.time() - script_start
     logging.info(f"\n\nMain script terminated in {script_time:.5f} seconds")
+
+
+def _evaluate_policy(task: Task, policy: LiftedDecisionList) -> bool:
+    goal = set(utils.get_goal_strs(task))
+    objects = set(task.problem.objects.items()) | set(
+        task.domain.constants.items())
+    for _ in range(FLAGS.horizon):
+        state = set(utils.get_init_strs(task))
+        if goal.issubset(state):
+            logging.debug("Goal reached!")
+            return True
+        act = utils.query_ldl(policy, state, objects, goal)
+        logging.debug(f"Taking action: {act} from state: {state}")
+        if act is None:
+            return False
+        task = utils.advance_task(task, act)
+    return False
 
 
 if __name__ == "__main__":  # pragma: no cover

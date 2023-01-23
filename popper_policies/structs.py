@@ -88,6 +88,22 @@ TaskMetrics = Dict[str, Any]
 Metrics = Dict[str, TaskMetrics]
 
 
+def _ground_atom(atom: PyperplanPredicate, sub: Dict[str, str]) -> str:
+    pred_name = atom.name
+    if len(atom.signature) > 0:
+        arg_str = " ".join([sub[v] for v, _ in atom.signature])
+        return f"({pred_name} {arg_str})"
+    return f"({pred_name})"
+
+
+def _ground_operator(op: PyperplanAction, sub: Dict[str, str]) -> str:
+    op_name = op.name
+    if len(op.signature) > 0:
+        arg_str = " ".join([sub[v] for v, _ in op.signature])
+        return f"({op_name} {arg_str})"
+    return f"({op_name})"
+
+
 @dataclass(frozen=True, repr=False, eq=False)
 class LDLRule:
     """A lifted decision list rule."""
@@ -105,11 +121,10 @@ class LDLRule:
         """
         assert isinstance(objects, tuple)
         assert len(objects) == len(self.parameters)
-        sub = dict(zip(self.parameters, objects))
+        sub = {p: o for (p, _), o in zip(self.parameters, objects)}
         pre_s = {_ground_atom(atom, sub) for atom in self.state_preconditions}
         pre_g = {_ground_atom(atom, sub) for atom in self.goal_preconditions}
-        op_objects = tuple(sub[v] for v in self.operator.parameters)
-        ground_op = _ground_operator(self.operator, op_objects)
+        ground_op = _ground_operator(self.operator, sub)
         return _GroundLDLRule(self, list(objects), pre_s, pre_g, ground_op)
 
     @cached_property
@@ -182,44 +197,10 @@ class _GroundLDLRule:
     goal_preconditions: Set[PyperplanPredicate]
     ground_operator: PyperplanAction
 
-    @cached_property
-    def _str(self) -> str:
-        op_obj_str = ", ".join([str(o) for o in self.ground_operator.objects])
-        return f"""GroundLDLRule-{self.name}:
-    Parameters: {self.objects}
-    State Pre: {sorted(self.state_preconditions, key=str)}
-    Goal Pre: {sorted(self.goal_preconditions, key=str)}
-    Operator: {self.ground_operator.name}({op_obj_str})"""
-
-    @cached_property
-    def _hash(self) -> int:
-        return hash(str(self))
-
     @property
     def name(self) -> str:
         """Name of this ground LDL rule."""
         return self.parent.name
-
-    def __str__(self) -> str:
-        return self._str
-
-    def __repr__(self) -> str:
-        return str(self)
-
-    def __hash__(self) -> int:
-        return self._hash
-
-    def __eq__(self, other: object) -> bool:
-        assert isinstance(other, _GroundLDLRule)
-        return str(self) == str(other)
-
-    def __lt__(self, other: object) -> bool:
-        assert isinstance(other, _GroundLDLRule)
-        return str(self) < str(other)
-
-    def __gt__(self, other: object) -> bool:
-        assert isinstance(other, _GroundLDLRule)
-        return str(self) > str(other)
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,7 @@ from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
-                 plan_strs: List[Plan]) -> str:
+                 plan_strs: List[Plan]) -> LiftedDecisionList:
     """Learn a goal-conditioned policy using Popper."""
     # Parse the PDDL.
     tasks = [Task(domain_str, problem_str) for problem_str in problem_strs]
@@ -28,17 +28,17 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     for plan in plan_strs:
         for ground_action in plan:
             assert ground_action.startswith("(")
-            action, remainder = ground_action[1:].split(" ", 1)
+            action_name, remainder = ground_action[1:].split(" ", 1)
             arity = len(remainder.split(" "))
-            action_set.add((action, arity))
+            action_set.add((action_name, arity))
     actions = sorted(action_set)
     logging.info(f"Found actions in plans: {actions}")
 
     # Convert the plans into state-goal-action triplets.
     demo_state_goal_actions = []
     for task, plan in zip(tasks, plan_strs):
-        for state, goal, action in utils.plan_to_trajectory(task, plan):
-            demo_state_goal_actions.append((state, goal, action))
+        for state, goal, act in utils.plan_to_trajectory(task, plan):
+            demo_state_goal_actions.append((state, goal, act))
 
     # The background knowledge is constant across all actions.
     bk_str = _create_background_knowledge(demo_state_goal_actions)
@@ -76,7 +76,7 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(examples_str)
 
             # Call popper.
-            logging.debug(f"Calling popper.")
+            logging.debug("Calling popper.")
             settings = PopperSettings(kbpath=temp_dir)
             # TODO: debug potential interference between successive calls.
             # https://github.com/logic-and-learning-lab/Popper/issues/62
@@ -191,12 +191,12 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
                 continue
             all_possible_actions.add(op.name)
 
-    pos_strs = set()
-    neg_strs = set()
-    for ex_id, (_, _, action) in enumerate(demo_state_goal_actions):
+    pos_strs: Set[str] = set()
+    neg_strs: Set[str] = set()
+    for ex_id, (_, _, a) in enumerate(demo_state_goal_actions):
         for other_action in all_possible_actions:
             # Positive example
-            if action == other_action:
+            if a == other_action:
                 wrapper = "pos"
                 destination = pos_strs
             # Negative example
@@ -219,7 +219,8 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
 """
 
 
-def _popper_programs_to_policy(popper_programs, domain):
+def _popper_programs_to_policy(popper_programs: List,
+                               domain: PyperplanDomain) -> LiftedDecisionList:
     policy_rules = []
     for prog in popper_programs:
         for rule in order_prog(prog):
@@ -257,8 +258,8 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
     parameter_set.update(action_args)
     parameters = sorted(parameter_set)
     param_to_type = {}
-    state_preconditions = set()
-    goal_preconditions = set()
+    state_preconditions: Set[PyperplanPredicate] = set()
+    goal_preconditions: Set[PyperplanPredicate] = set()
     for pred_name, params in conditions:
         if pred_name.startswith("goal_"):
             destination = goal_preconditions
@@ -270,10 +271,10 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
         new_signature = [(p, t) for p, (_, t) in zip(params, orig_signature)]
         new_pred = PyperplanPredicate(pred_name, new_signature)
         destination.add(new_pred)
-        for param, type in new_signature:
+        for param, typ in new_signature:
             if param not in param_to_type:
-                param_to_type[param] = type
-            assert param_to_type[param] == type
+                param_to_type[param] = typ
+            assert param_to_type[param] == typ
 
     orig_operator = domain.actions[action_name]
     orig_signature = orig_operator.signature
@@ -281,10 +282,10 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
 
     # TODO refactor redundant code
     new_signature = [(p, t) for p, (_, t) in zip(action_args, orig_signature)]
-    for param, type in new_signature:
+    for param, typ in new_signature:
         if param not in param_to_type:
-            param_to_type[param] = type
-        assert param_to_type[param] == type
+            param_to_type[param] = typ
+        assert param_to_type[param] == typ
     sub = {
         old: new
         for (old, _), (new, _) in zip(orig_signature, new_signature)
