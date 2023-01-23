@@ -8,6 +8,7 @@ from typing import List, Tuple
 from popper_policies import utils
 from popper_policies.envs import create_tasks
 from popper_policies.flags import FLAGS, parse_flags
+from popper_policies.learn import learn_policy
 from popper_policies.structs import Plan, Task
 
 
@@ -43,7 +44,19 @@ def _main() -> None:
         demo = (task, plan)
         demos.append(demo)
 
-    del eval_tasks, demos
+    # Use demonstrations to learn policy.
+    domain_str = demos[0][0].domain_str
+    problem_strs = []
+    plan_strs = []
+    for task, plan in demos:
+        assert task.domain_str == domain_str
+        problem_strs.append(task.problem_str)
+        plan_strs.append(plan)
+    policy_str = learn_policy(domain_str, problem_strs, plan_strs)
+    logging.info(f"Learned policy:\n{policy_str}")
+
+    # Evaluate the learned policy.
+    del eval_tasks
 
     script_time = time.time() - script_start
     logging.info(f"\n\nMain script terminated in {script_time:.5f} seconds")
