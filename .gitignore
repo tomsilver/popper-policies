@@ -1,0 +1,15 @@
+__pycache__
+.eggs
+*.pyc
+.DS_Store
+*.egg-info
+*.pkl
+*~
+*.python-version
+*.csv
+*.zip
+venv
+build
+dist
+.coverage
+.coverage.*
