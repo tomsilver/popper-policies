@@ -11,8 +11,9 @@ from popper.util import Settings as PopperSettings
 from popper.util import order_prog, order_rule
 
 from popper_policies import utils
-from popper_policies.structs import LiftedDecisionListPolicy, \
-    LiftedDecisionListRule, Plan, StateGoalAction, Task
+from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
+    PyperplanAction, PyperplanDomain, PyperplanEffect, PyperplanPredicate, \
+    StateGoalAction, Task
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -83,7 +84,9 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             assert prog is not None
             programs.append(prog)
 
-    return _popper_programs_to_policy(programs)
+    domain = tasks[0].domain
+    policy = _popper_programs_to_policy(programs, domain)
+    return policy
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
@@ -216,7 +219,7 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
 """
 
 
-def _popper_programs_to_policy(popper_programs):
+def _popper_programs_to_policy(popper_programs, domain):
     policy_rules = []
     for prog in popper_programs:
         for rule in order_prog(prog):
@@ -225,13 +228,82 @@ def _popper_programs_to_policy(popper_programs):
             assert act_literal
             action_str = str(act_literal.predicate)
             action_arg_strs = [str(a) for a in act_literal.arguments]
+            # By convention, the last argument encodes the example ID, and
+            # should be removed.
+            example_id_arg = action_arg_strs.pop(-1)
             action = (action_str, action_arg_strs)
             # Parse conditions.
             conditions = []
             for cond in body:
                 pred_str = str(cond.predicate)
-                pred_arg_strs = [str(a) for a in cond.arguments]
-                conditions.append(pred_str, pred_arg_strs)
-            rule = LiftedDecisionListRule(conditions, action)
+                pred_arg_strs = [
+                    str(a) for a in cond.arguments if str(a) != example_id_arg
+                ]
+                conditions.append((pred_str, pred_arg_strs))
+            rule = _create_ldl_rule(conditions, action, domain)
+            print(rule)
+            import ipdb
+            ipdb.set_trace()
             policy_rules.append(rule)
-    return LiftedDecisionListPolicy(policy_rules)
+    return LiftedDecisionList(policy_rules)
+
+
+def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
+                     action: Tuple[str, List[str]],
+                     domain: PyperplanDomain) -> LDLRule:
+    action_name, action_args = action
+    name = action_name + "-rule"
+    parameter_set = set()
+    for _, params in conditions:
+        parameter_set.update(params)
+    parameter_set.update(action_args)
+    parameters = sorted(parameter_set)
+    param_to_type = {}
+    state_preconditions = set()
+    goal_preconditions = set()
+    for pred_name, params in conditions:
+        if pred_name.startswith("goal_"):
+            destination = goal_preconditions
+            pred_name = pred_name[len("goal_"):]
+        else:
+            destination = state_preconditions
+        orig_signature = domain.predicates[pred_name].signature
+        assert len(params) == len(orig_signature)
+        new_signature = [(p, t) for p, (_, t) in zip(params, orig_signature)]
+        new_pred = PyperplanPredicate(pred_name, new_signature)
+        destination.add(new_pred)
+        for param, type in new_signature:
+            if param not in param_to_type:
+                param_to_type[param] = type
+            assert param_to_type[param] == type
+
+    orig_operator = domain.actions[action_name]
+    orig_signature = orig_operator.signature
+    assert len(action_args) == len(orig_signature)
+
+    # TODO refactor redundant code
+    new_signature = [(p, t) for p, (_, t) in zip(action_args, orig_signature)]
+    for param, type in new_signature:
+        if param not in param_to_type:
+            param_to_type[param] = type
+        assert param_to_type[param] == type
+    sub = {
+        old: new
+        for (old, _), (new, _) in zip(orig_signature, new_signature)
+    }
+
+    def _sub(predicate: PyperplanPredicate) -> PyperplanPredicate:
+        orig_signature = domain.predicates[predicate.name].signature
+        new_signature = [(sub[p], t) for p, t in orig_signature]
+        return PyperplanPredicate(predicate.name, new_signature)
+
+    new_params = [(p, param_to_type[p]) for p in parameters]
+    new_preconds = {_sub(e) for e in orig_operator.precondition}
+    new_effects = PyperplanEffect()
+    new_effects.addlist = {_sub(e) for e in orig_operator.effect.addlist}
+    new_effects.dellist = {_sub(e) for e in orig_operator.effect.dellist}
+    new_operator = PyperplanAction(action_name, new_signature, new_preconds,
+                                   new_effects)
+
+    return LDLRule(name, new_params, state_preconditions, goal_preconditions,
+                   new_operator)
