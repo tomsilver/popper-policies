@@ -95,20 +95,20 @@ def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
 head_pred({action_name},{action_arity+1}).
 """
 
+def _atom_str_to_prolog_str(atom_str: str, task_id: int) -> str:
+    """Reformat atom string to include the task id, and remove spaces."""
+    # Remove spaces.
+    s = atom_str.replace(" ", ",")
+    # Add task id.
+    assert s.endswith(")")
+    s = f"{s[:-1]},{task_id})"
+    return s
+
 
 def _create_background_knowledge(tasks: List[Task]) -> str:
     """Returns the content of a Popper background knowledge file."""
     # Prolog complains if the file is not organized by predicate.
     pred_to_strs: DefaultDict[Tuple[str, int], Set[str]] = defaultdict(set)
-
-    # Reformat atom string to include the task id, and remove spaces.
-    def _atom_str_to_prolog_str(atom_str: str, task_id: int) -> str:
-        # Remove spaces.
-        s = atom_str.replace(" ", ",")
-        # Add task id.
-        assert s.endswith(")")
-        s = f"{s[:-1]},{task_id})"
-        return s
 
     for task_id, task in enumerate(tasks):
         for atom in task.problem.initial_state:
@@ -145,5 +145,28 @@ def _create_examples(tasks: List[Task], plan_strs: List[Plan],
     action. All other possible actions are treated as negative examples.
     """
     assert len(tasks) == len(plan_strs)
-    import ipdb
-    ipdb.set_trace()
+    
+    # Generate all possible actions for the sake of negative examples.
+    # We may want to subsample in the future because this could get very big.
+    all_possible_actions = set()
+    for task in tasks:
+        for op in task.pyperplan_task.operators:
+            if not op.name.startswith(f"({action[0]}"):
+                continue
+            for task_id in range(len(tasks)):
+                action_str = _atom_str_to_prolog_str(op.name, task_id)
+                all_possible_actions.add(action_str)
+
+    pos_strs = set()
+    neg_strs = set()
+    for task_id, task in enumerate(tasks):
+        plan = plan_strs[task_id]
+        for demo_action in plan:
+            import ipdb; ipdb.set_trace()
+    
+    return f"""% Positive examples
+{pos_str}
+
+% Negative examples
+{neg_str}
+"""
