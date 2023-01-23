@@ -8,9 +8,11 @@ from typing import DefaultDict, List, Optional, Set, Tuple
 
 from popper.loop import learn_solution
 from popper.util import Settings as PopperSettings
+from popper.util import order_prog, order_rule
 
 from popper_policies import utils
-from popper_policies.structs import Plan, StateGoalAction, Task
+from popper_policies.structs import LiftedDecisionListPolicy, \
+    LiftedDecisionListRule, Plan, StateGoalAction, Task
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -75,11 +77,13 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             # Call popper.
             logging.debug(f"Calling popper.")
             settings = PopperSettings(kbpath=temp_dir)
+            # TODO: debug potential interference between successive calls.
+            # https://github.com/logic-and-learning-lab/Popper/issues/62
             prog, _, _ = learn_solution(settings)
             assert prog is not None
             programs.append(prog)
 
-    import ipdb; ipdb.set_trace()
+    return _popper_programs_to_policy(programs)
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
@@ -210,3 +214,24 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
 % Negative examples
 {neg_str}
 """
+
+
+def _popper_programs_to_policy(popper_programs):
+    policy_rules = []
+    for prog in popper_programs:
+        for rule in order_prog(prog):
+            act_literal, body = order_rule(rule)
+            # Parse action.
+            assert act_literal
+            action_str = str(act_literal.predicate)
+            action_arg_strs = [str(a) for a in act_literal.arguments]
+            action = (action_str, action_arg_strs)
+            # Parse conditions.
+            conditions = []
+            for cond in body:
+                pred_str = str(cond.predicate)
+                pred_arg_strs = [str(a) for a in cond.arguments]
+                conditions.append(pred_str, pred_arg_strs)
+            rule = LiftedDecisionListRule(conditions, action)
+            policy_rules.append(rule)
+    return LiftedDecisionListPolicy(policy_rules)
