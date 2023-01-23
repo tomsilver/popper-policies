@@ -4,9 +4,10 @@ import logging
 import tempfile
 from collections import defaultdict
 from pathlib import Path
-import os
-import subprocess
 from typing import DefaultDict, List, Optional, Set, Tuple
+
+from popper.loop import learn_solution
+from popper.util import Settings as PopperSettings
 
 from popper_policies import utils
 from popper_policies.structs import Plan, StateGoalAction, Task
@@ -40,6 +41,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     bk_str = _create_background_knowledge(demo_state_goal_actions)
     logging.debug(f"Created background string:\n{bk_str}")
 
+    programs = []
+
     for action in actions:
         logging.info(f"Learning rules for action: {action}")
 
@@ -71,14 +74,12 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 
             # Call popper.
             logging.debug(f"Calling popper.")
-            # I would like to use the Python bindings, but it doesn't look
-            # possible right now. Maybe contribute this later.
-            popper_path = os.environ["POPPER_PATH"]
-            exec_str = os.path.join(popper_path, "popper.py")
-            cmd_str = f'"{exec_str}" {temp_dir}'
-            output = subprocess.getoutput(cmd_str)
-            logging.debug(f"Popper output:\n{output}")
-            import ipdb; ipdb.set_trace()
+            settings = PopperSettings(kbpath=temp_dir)
+            prog, _, _ = learn_solution(settings)
+            assert prog is not None
+            programs.append(prog)
+
+    import ipdb; ipdb.set_trace()
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
