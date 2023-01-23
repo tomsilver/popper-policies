@@ -1,13 +1,13 @@
 """Learn policies for PDDL domains using Popper (ILP system)."""
 
-from collections import defaultdict
 import logging
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import DefaultDict, List, Set, Tuple
 
-from popper_policies.structs import Plan, Task
 from popper_policies import utils
+from popper_policies.structs import Plan, Task
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -52,7 +52,10 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(bk_str)
 
             # Create the examples (exs) file.
-            import ipdb; ipdb.set_trace()
+            examples_str = _create_examples(tasks, plan_strs, action)
+            examples_file = temp_dir_path / "exs.pl"
+            with open(examples_file, "w", encoding="utf-8") as f:
+                f.write(examples_str)
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
@@ -103,7 +106,7 @@ def _create_background_knowledge(tasks: List[Task]) -> str:
         assert s.endswith(")")
         s = f"{s[:-1]},{task_id})"
         return s
-    
+
     for task_id, task in enumerate(tasks):
         for atom in task.problem.initial_state:
             name = atom.name
@@ -128,3 +131,15 @@ def _create_background_knowledge(tasks: List[Task]) -> str:
         bk_str += "\n".join(sorted(pred_to_strs[pred]))
         bk_str += "\n"
     return bk_str
+
+
+def _create_examples(tasks: List[Task], plan_strs: List[Plan],
+                     action: Tuple[str, int]) -> str:
+    """Returns the content of a Popper examples file.
+
+    Currently makes the (often incorrect!) assumption that there is only
+    one "good" action for each (state, goal), i.e., the demonstrated
+    action. All other possible actions are treated as negative examples.
+    """
+    assert len(tasks) == len(plan_strs)
+    import ipdb; ipdb.set_trace()
