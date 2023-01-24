@@ -69,8 +69,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 
             # Create the bias file.
             # NOTE: Prolog complains if we introduce an unused predicate, so
-            # just collect seen predicates from the problems themselves.
-            bias_str = _create_bias(tasks, action)
+            # just collect seen predicates from the demos themselves.
+            bias_str = _create_bias(demo_state_goal_actions, action)
             logging.debug(f"Created bias string:\n{bias_str}")
             bias_file = temp_dir_path / "bias.pl"
             with open(bias_file, "w", encoding="utf-8") as f:
@@ -126,20 +126,21 @@ def _run_popper_process(settings: PopperSettings,
     return_dict['prog'] = prog
 
 
-def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
+def _create_bias(state_action_goals: List[StateGoalAction],
+                 action: Tuple[str, int]) -> str:
     """Returns the content of a Popper bias file."""
     action_name, action_arity = action
 
     # Collect all predicates and goal predicates with their names and arities.
     predicates: Set[Tuple[str, int]] = set()
     goal_predicates: Set[Tuple[str, int]] = set()
-    for task in tasks:
-        for atom in task.problem.initial_state:
+    for state, goal, _ in state_action_goals:
+        for atom in state:
             name = atom.name
             arity = len(atom.signature)
             predicates.add((name, arity))
             assert not name.startswith("goal_")
-        for atom in task.problem.goal:
+        for atom in goal:
             name = atom.name
             arity = len(atom.signature)
             goal_predicates.add((name, arity))
