@@ -1,10 +1,12 @@
 """Learn policies for PDDL domains using Popper (ILP system)."""
 
 import logging
+import multiprocessing
 import tempfile
 from collections import defaultdict
+from multiprocessing import Process
 from pathlib import Path
-from typing import DefaultDict, List, Optional, Set, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
 
 from popper.loop import learn_solution
 from popper.util import Settings as PopperSettings
@@ -76,17 +78,31 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(examples_str)
 
             # Call popper.
-            logging.debug("Calling popper.")
-            settings = PopperSettings(kbpath=temp_dir)
-            # TODO: debug potential interference between successive calls.
-            # https://github.com/logic-and-learning-lab/Popper/issues/62
-            prog, _, _ = learn_solution(settings)
-            assert prog is not None
+            prog = _run_popper(kbpath=temp_dir)
             programs.append(prog)
 
     domain = tasks[0].domain
     policy = _popper_programs_to_policy(programs, domain)
     return policy
+
+
+def _run_popper(kbpath: str) -> List:
+    """Run popper and return the learned program."""
+    logging.debug("Calling popper.")
+    settings = PopperSettings(kbpath=kbpath)
+    # See https://github.com/logic-and-learning-lab/Popper/issues/62
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
+    p = Process(target=_run_popper_process, args=(settings, return_dict))
+    p.start()
+    p.join()
+    return return_dict['prog']
+
+
+def _run_popper_process(settings: PopperSettings,
+                        return_dict: Dict[str, Any]) -> None:
+    prog, _, _ = learn_solution(settings)
+    return_dict['prog'] = prog
 
 
 def _create_bias(tasks: List[Task], action: Tuple[str, int]) -> str:
