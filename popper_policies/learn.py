@@ -38,13 +38,15 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 
     # Collect all actions seen in the plans; learn one program per action.
     # Actions are recorded with their names and arities.
-    action_set: Set[Tuple[str, int]] = set()
+    action_set: Set[Tuple[str, int, Tuple[str, ...]]] = set()
     for plan in plan_strs:
         for ground_action in plan:
             assert ground_action.startswith("(")
             action_name, remainder = ground_action[1:].split(" ", 1)
             arity = len(remainder.split(" "))
-            action_set.add((action_name, arity))
+            signature = domain.actions[action_name].signature
+            action_types = tuple(t[0].name for _, t in signature)
+            action_set.add((action_name, arity, action_types))
     actions = sorted(action_set)
     logging.info(f"Found actions in plans: {actions}")
 
@@ -127,29 +129,43 @@ def _run_popper_process(settings: PopperSettings,
 
 
 def _create_bias(state_action_goals: List[StateGoalAction],
-                 action: Tuple[str, int]) -> str:
+                 action: Tuple[str, int, Tuple[str, ...]]) -> str:
     """Returns the content of a Popper bias file."""
-    action_name, action_arity = action
+    action_name, action_arity, action_types = action
 
-    # Collect all predicates and goal predicates with their names and arities.
-    predicates: Set[Tuple[str, int]] = set()
-    goal_predicates: Set[Tuple[str, int]] = set()
+    # Collect all predicates with their names, arities, and types.
+    predicates: Set[Tuple[str, int, Tuple[str, ...]]] = set()
+    goal_predicates: Set[Tuple[str, int, Tuple[str, ...]]] = set()
     for state, goal, _ in state_action_goals:
         for atom in state:
             name = atom.name
             arity = len(atom.signature)
-            predicates.add((name, arity))
+            types = tuple(t.name for _, t in atom.signature)
+            predicates.add((name, arity, types))
             assert not name.startswith("goal_")
         for atom in goal:
             name = atom.name
             arity = len(atom.signature)
-            goal_predicates.add((name, arity))
+            types = tuple(t[0].name for _, t in atom.signature)
+            goal_predicates.add((name, arity, types))
 
     # Create predicate and goal predicate strings.
     pred_str = "\n".join(f"body_pred({name},{arity+1})."
-                         for name, arity in sorted(predicates))
+                         for name, arity, _ in sorted(predicates))
     goal_pred_str = "\n".join(f"body_pred(goal_{name},{arity+1})."
-                              for name, arity in sorted(goal_predicates))
+                              for name, arity, _ in sorted(goal_predicates))
+
+    # Add bias for types.
+    type_strs: Set[str] = set()
+    for name, _, types in predicates | goal_predicates:
+        inner_str = ",".join(types)
+        line = f"type({name},({inner_str},ex_id))."
+        type_strs.add(line)
+    inner_str = ",".join(action_types)
+    line = f"type({action_name},({inner_str},ex_id))."
+    type_strs.add(line)
+
+    type_str = "\n".join(type_strs)
 
     return f"""% Predicates
 {pred_str}
@@ -159,6 +175,12 @@ def _create_bias(state_action_goals: List[StateGoalAction],
 
 % Action
 head_pred({action_name},{action_arity+1}).
+
+% Type constraints
+{type_str}
+
+% Example ID can only appear once
+:- clause(C), #count{{V : clause_var(C,V),var_type(C,V,ex_id)}} != 1.
 """
 
 
@@ -215,7 +237,8 @@ def _create_background_knowledge(
 
 
 def _create_examples(demo_state_goal_actions: List[StateGoalAction],
-                     tasks: List[Task], action: Tuple[str, int]) -> str:
+                     tasks: List[Task], action: Tuple[str, int,
+                                                      Tuple[str, ...]]) -> str:
     """Returns the content of a Popper examples file.
 
     Currently makes the (often incorrect!) assumption that there is only
