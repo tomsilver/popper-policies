@@ -83,8 +83,8 @@ def run_planning(
 
 def run_pyperplan_planning(
     task: Task,
-    heuristic: str = "hff",
-    search: str = "gbf",
+    heuristic: str = "lmcut",
+    search: str = "astar",
 ) -> Tuple[Optional[Plan], TaskMetrics]:
     """Find a plan with pyperplan."""
     search_fn = SEARCHES[search]
