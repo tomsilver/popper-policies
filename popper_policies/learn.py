@@ -21,7 +21,16 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                  plan_strs: List[Plan]) -> LiftedDecisionList:
     """Learn a goal-conditioned policy using Popper."""
     # Parse the PDDL.
-    tasks = [Task(domain_str, problem_str) for problem_str in problem_strs]
+    tasks = [Task(domain_str, prob_str) for prob_str in problem_strs]
+    domain = tasks[0].domain
+
+    # Since prolog is sensitive to syntax (e.g., no dashes in names), we need
+    # to replace some predicate, action, and object names in the tasks. We will
+    # invert these substitutions in the learned policies at the end. Note that
+    # we don't need to store object name substitutions because objects won't
+    # appear in the learned policies.
+    domain_name_substitutions = _get_prolog_domain_subsitutions(domain)
+    tasks = [_prologify_task(t, domain_name_substitutions) for t in tasks]
 
     # Collect all actions seen in the plans; learn one program per action.
     # Actions are recorded with their names and arities.
@@ -80,8 +89,11 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             prog = _run_popper(kbpath=temp_dir)
             programs.append(prog)
 
-    domain = tasks[0].domain
     policy = _popper_programs_to_policy(programs, domain)
+
+    # Invert the substitutions so that the policy matches the original domain.
+    policy = _unprologify_policy(policy, domain_name_substitutions)
+
     return policy
 
 
@@ -301,3 +313,22 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
 
     return LDLRule(name, new_params, state_preconditions, goal_preconditions,
                    new_operator)
+
+
+# Predicate substitutions, action substitutions.
+_DomainSubstitutions = Tuple[Dict[str, str], Dict[str, str]]
+
+
+def _get_prolog_domain_subsitutions(
+        domain: PyperplanDomain) -> _DomainSubstitutions:
+    import ipdb; ipdb.set_trace()
+
+
+def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
+    import ipdb; ipdb.set_trace()
+
+
+def _unprologify_policy(
+        policy: LiftedDecisionList,
+        domain_name_substitutions: _DomainSubstitutions) -> LiftedDecisionList:
+    import ipdb; ipdb.set_trace()
