@@ -17,7 +17,7 @@ def create_tasks(
     if env_name.startswith("pyperplan-"):
         benchmark_name = env_name[len("pyperplan-"):]
         tasks = _get_pyperplan_tasks(benchmark_name, total_num_tasks)
-    if env_name.startswith("custom-"):
+    elif env_name.startswith("custom-"):
         benchmark_name = env_name[len("custom-"):]
         tasks = _get_custom_tasks(benchmark_name, total_num_tasks)
     else:
