@@ -14,8 +14,7 @@ from popper.util import order_prog, order_rule
 
 from popper_policies import utils
 from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
-    PyperplanAction, PyperplanDomain, PyperplanEffect, PyperplanPredicate, \
-    StateGoalAction, Task
+    PyperplanDomain, PyperplanPredicate, StateGoalAction, Task
 
 
 def learn_policy(domain_str: str, problem_strs: List[str],
@@ -268,12 +267,6 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
                      domain: PyperplanDomain) -> LDLRule:
     action_name, action_args = action
     name = action_name + "-rule"
-    parameter_set = set()
-    for _, params in conditions:
-        parameter_set.update(params)
-    parameter_set.update(action_args)
-    parameters = sorted(parameter_set)
-    param_to_type = {}
     state_preconditions: Set[PyperplanPredicate] = set()
     goal_preconditions: Set[PyperplanPredicate] = set()
     for pred_name, params in conditions:
@@ -282,43 +275,27 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
             pred_name = pred_name[len("goal_"):]
         else:
             destination = state_preconditions
-        orig_signature = domain.predicates[pred_name].signature
+        pred = domain.predicates[pred_name]
+        orig_signature = pred.signature
         assert len(params) == len(orig_signature)
-        new_signature = [(p, t) for p, (_, t) in zip(params, orig_signature)]
-        new_pred = PyperplanPredicate(pred_name, new_signature)
+        sub = {old: new for (old, _), new in zip(orig_signature, params)}
+        new_pred = utils.apply_substitution(pred, sub)
         destination.add(new_pred)
-        for param, typ in new_signature:
-            if param not in param_to_type:
-                param_to_type[param] = typ
-            assert param_to_type[param] == typ
 
     orig_operator = domain.actions[action_name]
     orig_signature = orig_operator.signature
     assert len(action_args) == len(orig_signature)
+    sub = {old: new for (old, _), new in zip(orig_signature, action_args)}
+    new_operator = utils.apply_substitution(orig_operator, sub)
 
-    # TODO refactor redundant code
-    new_signature = [(p, t) for p, (_, t) in zip(action_args, orig_signature)]
-    for param, typ in new_signature:
-        if param not in param_to_type:
-            param_to_type[param] = typ
-        assert param_to_type[param] == typ
-    sub = {
-        old: new
-        for (old, _), (new, _) in zip(orig_signature, new_signature)
-    }
-
-    def _sub(predicate: PyperplanPredicate) -> PyperplanPredicate:
-        orig_signature = predicate.signature
-        new_signature = [(sub[p], t) for p, t in orig_signature]
-        return PyperplanPredicate(predicate.name, new_signature)
-
-    new_params = [(p, param_to_type[p]) for p in parameters]
-    new_preconds = {_sub(e) for e in orig_operator.precondition}
-    new_effects = PyperplanEffect()
-    new_effects.addlist = {_sub(e) for e in orig_operator.effect.addlist}
-    new_effects.dellist = {_sub(e) for e in orig_operator.effect.dellist}
-    new_operator = PyperplanAction(action_name, new_signature, new_preconds,
-                                   new_effects)
+    # Collect params from the other components.
+    new_params_dict = {}
+    for cond in state_preconditions | goal_preconditions:
+        for param, typ in cond.signature:
+            new_params_dict[param] = typ
+    for param, typ in new_operator.signature:
+        new_params_dict[param] = typ
+    new_params = sorted(new_params_dict.items())
 
     return LDLRule(name, new_params, state_preconditions, goal_preconditions,
                    new_operator)

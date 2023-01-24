@@ -18,8 +18,9 @@ from pyperplan.planner import HEURISTICS, SEARCHES, search_plan
 
 from popper_policies.flags import FLAGS
 from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
-    PyperplanObject, PyperplanOperator, PyperplanPredicate, PyperplanType, \
-    StateGoalAction, Task, TaskMetrics, _GroundLDLRule
+    PyperplanAction, PyperplanEffect, PyperplanObject, PyperplanOperator, \
+    PyperplanPredicate, PyperplanType, StateGoalAction, Task, TaskMetrics, \
+    _GroundLDLRule
 
 # Global constants.
 _DIR = Path(__file__).parent
@@ -358,3 +359,37 @@ def query_ldl(ldl: LiftedDecisionList, atoms: Set[str],
                ground_rule.goal_preconditions.issubset(goal):
                 return ground_rule.ground_operator
     return None
+
+
+@functools.singledispatch
+def apply_substitution(target, sub: Dict[str, str]):
+    """Apply a substitution to a pyperplan struct."""
+    raise NotImplementedError("See below.")
+
+
+@apply_substitution.register
+def _(target: PyperplanPredicate, sub: Dict[str, str]) -> PyperplanPredicate:
+    """Apply a substitution to a predicate."""
+    orig_signature = target.signature
+    new_signature = [(sub[p], t) for p, t in orig_signature]
+    return PyperplanPredicate(target.name, new_signature)
+
+
+@apply_substitution.register
+def _(target: PyperplanAction, sub: Dict[str, str]) -> PyperplanAction:
+    """Apply a substitution to an operator."""
+    orig_signature = target.signature
+    new_signature = [(sub[p], t) for p, t in orig_signature]
+    new_preconds = {apply_substitution(e, sub) for e in target.precondition}
+    new_effects = PyperplanEffect()
+    old_effects = target.effect
+    new_effects.addlist = {
+        apply_substitution(e, sub)
+        for e in old_effects.addlist
+    }
+    new_effects.dellist = {
+        apply_substitution(e, sub)
+        for e in old_effects.dellist
+    }
+    return PyperplanAction(target.name, new_signature, new_preconds,
+                           new_effects)
