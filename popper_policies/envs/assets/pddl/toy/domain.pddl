@@ -1,25 +1,25 @@
 (define (domain toy-delivery)
     (:requirements :strips)
     (:predicates 
-        (at ?loc)
+        (at-robby ?loc)
         (satisfied ?loc)
     )
     
     (:action move
         :parameters (?from ?to)
         :precondition (and
-            (at ?from) 
+            (at-robby ?from) 
         )
         :effect (and
-            (not (at ?from))
-            (at ?to)
+            (not (at-robby ?from))
+            (at-robby ?to)
         )
     )
     
     (:action deliver
         :parameters (?loc)
         :precondition (and
-            (at ?loc)
+            (at-robby ?loc)
         )
         :effect (and
             (satisfied ?loc)

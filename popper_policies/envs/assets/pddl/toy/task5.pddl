@@ -3,7 +3,7 @@
     loc0 loc1 loc2
   )
   (:init 
-	(at loc2)
+	(at-robby loc2)
   )
   (:goal (and (satisfied loc0)))
 )

@@ -16,6 +16,9 @@ from popper_policies import utils
 from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
     PyperplanDomain, PyperplanPredicate, StateGoalAction, Task
 
+# Predicate substitutions, action substitutions.
+_DomainSubstitutions = Tuple[Dict[str, str], Dict[str, str]]
+
 
 def learn_policy(domain_str: str, problem_strs: List[str],
                  plan_strs: List[Plan]) -> LiftedDecisionList:
@@ -29,8 +32,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     # invert these substitutions in the learned policies at the end. Note that
     # we don't need to store object name substitutions because objects won't
     # appear in the learned policies.
-    domain_name_substitutions = _get_prolog_domain_subsitutions(domain)
-    tasks = [_prologify_task(t, domain_name_substitutions) for t in tasks]
+    domain_substitutions = _get_prolog_domain_substitutions(domain)
+    tasks = [_prologify_task(t, domain_substitutions) for t in tasks]
 
     # Collect all actions seen in the plans; learn one program per action.
     # Actions are recorded with their names and arities.
@@ -89,10 +92,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             prog = _run_popper(kbpath=temp_dir)
             programs.append(prog)
 
-    policy = _popper_programs_to_policy(programs, domain)
-
     # Invert the substitutions so that the policy matches the original domain.
-    policy = _unprologify_policy(policy, domain_name_substitutions)
+    policy = _popper_programs_to_policy(programs, domain, domain_substitutions)
 
     return policy
 
@@ -248,8 +249,12 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
 """
 
 
-def _popper_programs_to_policy(popper_programs: List,
-                               domain: PyperplanDomain) -> LiftedDecisionList:
+def _popper_programs_to_policy(
+        popper_programs: List, domain: PyperplanDomain,
+        domain_substitutions: _DomainSubstitutions) -> LiftedDecisionList:
+    predicate_subs, operator_subs = domain_substitutions
+    inv_pred_subs = {v: k for k, v in predicate_subs.items()}
+    inv_op_subs = {v: k for k, v in operator_subs.items()}
     policy_rules = []
     for prog in popper_programs:
         for rule in order_prog(prog):
@@ -257,6 +262,7 @@ def _popper_programs_to_policy(popper_programs: List,
             # Parse action.
             assert act_literal
             action_str = str(act_literal.predicate)
+            action_str = inv_op_subs[action_str]
             action_arg_strs = [str(a) for a in act_literal.arguments]
             # By convention, the last argument encodes the example ID, and
             # should be removed.
@@ -266,6 +272,10 @@ def _popper_programs_to_policy(popper_programs: List,
             conditions = []
             for cond in body:
                 pred_str = str(cond.predicate)
+                if pred_str.startswith("goal_"):
+                    pred_str = "goal_" + inv_pred_subs[pred_str[len("goal_"):]]
+                else:
+                    pred_str = inv_pred_subs[pred_str]
                 pred_arg_strs = [
                     str(a) for a in cond.arguments if str(a) != example_id_arg
                 ]
@@ -315,20 +325,54 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
                    new_operator)
 
 
-# Predicate substitutions, action substitutions.
-_DomainSubstitutions = Tuple[Dict[str, str], Dict[str, str]]
+def _prolog_transform(s: str) -> str:
+    return s.replace("-", "_")
 
 
-def _get_prolog_domain_subsitutions(
+def _get_prolog_domain_substitutions(
         domain: PyperplanDomain) -> _DomainSubstitutions:
-    import ipdb; ipdb.set_trace()
+    predicate_subs: Dict[str, str] = {}
+    operator_subs: Dict[str, str] = {}
+
+    for predicate in domain.predicates:
+        predicate_subs[predicate] = _prolog_transform(predicate)
+
+    for operator in domain.actions:
+        operator_subs[operator] = _prolog_transform(operator)
+
+    assert len(set(predicate_subs.values())) == len(predicate_subs)
+    assert len(set(operator_subs.values())) == len(operator_subs)
+
+    return (predicate_subs, operator_subs)
 
 
 def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
-    import ipdb; ipdb.set_trace()
+    predicate_subs, operator_subs = domain_subs
+    # Apply substitutions to domain.
+    domain_str = task.domain_str
+    for old, new in predicate_subs.items():
+        domain_str = domain_str.replace(old, new)
+    for old, new in operator_subs.items():
+        domain_str = domain_str.replace(old, new)
+    # This might break in some situations, need to be careful.
+    domain_str = domain_str.replace("-", "_")
+    domain_str = domain_str.replace(" _ ", " - ")
+
+    # Apply substitutions to problem, and handle object names.
+    problem_str = task.problem_str
+    for old, new in predicate_subs.items():
+        problem_str = problem_str.replace(old, new)
+    for old, new in operator_subs.items():
+        problem_str = problem_str.replace(old, new)
+    # This might break in some situations, need to be careful.
+    problem_str = problem_str.replace("-", "_")
+    problem_str = problem_str.replace(" _ ", " - ")
+
+    return Task(domain_str, problem_str)
 
 
 def _unprologify_policy(
         policy: LiftedDecisionList,
         domain_name_substitutions: _DomainSubstitutions) -> LiftedDecisionList:
-    import ipdb; ipdb.set_trace()
+    import ipdb
+    ipdb.set_trace()
