@@ -148,6 +148,8 @@ def _atom_str_to_prolog_str(atom_str: str,
     s = f"{name}({remainder}"
     # Remove spaces.
     s = s.replace(" ", ",")
+    # Replace dashes with underscores.
+    s = s.replace("-", "_")
     # Add task id.
     assert s.endswith(")")
     s = f"{s[:-1]},{example_id})"
