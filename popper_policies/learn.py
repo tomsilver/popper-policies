@@ -5,8 +5,9 @@ import multiprocessing
 import tempfile
 from collections import defaultdict
 from multiprocessing import Process
+from multiprocessing.managers import DictProxy
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple
+from typing import DefaultDict, Dict, List, Optional, Set, Tuple
 
 from popper.loop import learn_solution
 from popper.util import Settings as PopperSettings
@@ -101,18 +102,26 @@ def learn_policy(domain_str: str, problem_strs: List[str],
 def _run_popper(kbpath: str) -> List:
     """Run popper and return the learned program."""
     logging.debug("Calling popper.")
-    settings = PopperSettings(kbpath=kbpath)
+
+    # Toggle for debugging.
+    # settings = PopperSettings(kbpath=kbpath, debug=True)
+    # manager = multiprocessing.Manager()
+    # return_dict = manager.dict()
+    # _run_popper_process(settings, return_dict)
     # See https://github.com/logic-and-learning-lab/Popper/issues/62
+    settings = PopperSettings(kbpath=kbpath)
     manager = multiprocessing.Manager()
     return_dict = manager.dict()
     p = Process(target=_run_popper_process, args=(settings, return_dict))
     p.start()
     p.join()
+    # End toggle for debugging.
+
     return return_dict['prog']
 
 
 def _run_popper_process(settings: PopperSettings,
-                        return_dict: Dict[str, Any]) -> None:
+                        return_dict: DictProxy) -> None:
     prog, _, _ = learn_solution(settings)
     return_dict['prog'] = prog
 
@@ -369,10 +378,3 @@ def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
     problem_str = problem_str.replace(" _ ", " - ")
 
     return Task(domain_str, problem_str)
-
-
-def _unprologify_policy(
-        policy: LiftedDecisionList,
-        domain_name_substitutions: _DomainSubstitutions) -> LiftedDecisionList:
-    import ipdb
-    ipdb.set_trace()
