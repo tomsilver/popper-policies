@@ -41,6 +41,9 @@ def _main() -> None:
     for task in train_tasks:
         plan, _ = utils.run_planning(task, planner=FLAGS.planner)
         assert plan is not None, "Planning failed"
+        logging.debug("DEMO PLAN:")
+        for action in plan:
+            logging.debug(action)
         demo = (task, plan)
         demos.append(demo)
 
