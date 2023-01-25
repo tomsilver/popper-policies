@@ -146,18 +146,21 @@ class LDLRule:
             return f"({atom.name} {args_str})"
 
         inner_preconditions_strs = [
-            _atom_to_str(a) for a in sorted(self.pos_state_preconditions)
+            _atom_to_str(a)
+            for a in sorted(self.pos_state_preconditions, key=str)
         ]
         inner_preconditions_strs = [
             "(not " + _atom_to_str(a) + ")"
-            for a in sorted(self.neg_state_preconditions)
+            for a in sorted(self.neg_state_preconditions, key=str)
         ]
         preconditions_str = " ".join(inner_preconditions_strs)
         if len(inner_preconditions_strs) > 1:
             preconditions_str = "(and " + preconditions_str + ")"
         elif not inner_preconditions_strs:
             preconditions_str = "()"
-        goals_strs = [_atom_to_str(a) for a in sorted(self.goal_preconditions)]
+        goals_strs = [
+            _atom_to_str(a) for a in sorted(self.goal_preconditions, key=str)
+        ]
         goals_str = " ".join(goals_strs)
         if len(goals_strs) > 1:
             goals_str = "(and " + goals_str + ")"
