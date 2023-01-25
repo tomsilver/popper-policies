@@ -2,6 +2,8 @@
 
 from typing import List, Tuple
 
+import pddlgym
+
 from popper_policies import utils
 from popper_policies.structs import Task
 
@@ -17,6 +19,10 @@ def create_tasks(
     if env_name.startswith("pyperplan-"):
         benchmark_name = env_name[len("pyperplan-"):]
         tasks = _get_pyperplan_tasks(benchmark_name, total_num_tasks)
+    elif env_name.startswith("pddlgym-"):
+        benchmark_name = env_name[len("pddlgym-"):]
+        tasks = _get_pddlgym_tasks(benchmark_name, num_train)
+        tasks += _get_pddlgym_tasks(benchmark_name, num_eval, test=True)
     elif env_name.startswith("custom-"):
         benchmark_name = env_name[len("custom-"):]
         tasks = _get_custom_tasks(benchmark_name, total_num_tasks)
@@ -49,6 +55,32 @@ def _get_pyperplan_tasks(benchmark_name: str, num_tasks: int) -> List[Task]:
         except ValueError as e:
             assert "PDDL file not found" in str(e)
             raise ValueError(f"Could not download {problem_url}. "
+                             "Too many tasks?")
+        task = Task(domain_str, problem_str)
+        tasks.append(task)
+    return tasks
+
+
+def _get_pddlgym_tasks(benchmark_name: str,
+                       num_tasks: int,
+                       test: bool = False) -> List[Task]:
+    """Get PDDL tasks from PDDLGym."""
+    if test:
+        test_suffix = "Test"
+    else:
+        test_suffix = ""
+    env_name = f"PDDLEnv{benchmark_name.capitalize()}{test_suffix}-v0"
+    env = pddlgym.make(env_name).unwrapped
+    # Access the domain.
+    domain_str = env.domain.domain
+    # Access the problems.
+    tasks = []
+    for i in range(num_tasks):
+        try:
+            problem = env.problems[i]
+            problem_str = problem.problem
+        except IndexError:
+            raise ValueError(f"Could not find PDDLGym problem {i}. "
                              "Too many tasks?")
         task = Task(domain_str, problem_str)
         tasks.append(task)

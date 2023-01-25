@@ -16,6 +16,7 @@ setup(name="popper_policies",
           "pathos",
           "pyperplan",
           "typing-extensions",
+          "pddlgym",
       ],
       package_data={"popper_policies": ["py.typed"]},
       extras_require={
