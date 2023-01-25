@@ -192,7 +192,7 @@ def pred_to_type_names(pred: PyperplanPredicate) -> Tuple[str, ...]:
     """Extract name names from predicate (atom)."""
     names: List[str] = []
     for _, t in pred.signature:
-        if isinstance(t, list):
+        if isinstance(t, (list, tuple)):
             names.append(t[0].name)
         else:
             names.append(t.name)
