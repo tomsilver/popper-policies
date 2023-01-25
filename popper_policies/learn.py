@@ -58,9 +58,17 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             all_ground_actions.add(op.name)
 
     # Convert the plans into state-goal-action triplets.
+    # Add in negated predicates.
     demo_state_goal_actions = []
     for task, plan in zip(tasks, plan_strs):
         for state, goal, act in utils.plan_to_trajectory(task, plan):
+            # Add negated facts to state.
+            state_facts = {utils.pred_to_str(p) for p in state}
+            for fact in task.pyperplan_task.facts:
+                if fact not in state_facts:
+                    negated_pred = _create_negated_predicate(
+                        fact, task.domain.predicates)
+                    state.add(negated_pred)
             demo_state_goal_actions.append((state, goal, act))
 
     # Won't need the tasks anymore.
@@ -153,13 +161,13 @@ def _create_bias(state_action_goals: List[StateGoalAction],
         for atom in state:
             name = atom.name
             arity = len(atom.signature)
-            types = tuple(t.name for _, t in atom.signature)
+            types = utils.pred_to_type_names(atom)
             predicates.add((name, arity, types))
             assert not name.startswith("goal_")
         for atom in goal:
             name = atom.name
             arity = len(atom.signature)
-            types = tuple(t[0].name for _, t in atom.signature)
+            types = utils.pred_to_type_names(atom)
             goal_predicates.add((name, arity, types))
 
     # Create predicate and goal predicate strings.
@@ -333,14 +341,18 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
                      domain: PyperplanDomain) -> LDLRule:
     action_name, action_args = action
     name = action_name + "-rule"
-    state_preconditions: Set[PyperplanPredicate] = set()
+    pos_state_preconditions: Set[PyperplanPredicate] = set()
+    neg_state_preconditions: Set[PyperplanPredicate] = set()
     goal_preconditions: Set[PyperplanPredicate] = set()
     for pred_name, params in conditions:
         if pred_name.startswith("goal_"):
             destination = goal_preconditions
             pred_name = pred_name[len("goal_"):]
+        elif pred_name.startswith("negated_"):
+            destination = neg_state_preconditions
+            pred_name = pred_name[len("negated_"):]
         else:
-            destination = state_preconditions
+            destination = pos_state_preconditions
         pred = domain.predicates[pred_name]
         orig_signature = pred.signature
         assert len(params) == len(orig_signature)
@@ -356,15 +368,16 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
 
     # Collect params from the other components.
     new_params_dict = {}
-    for cond in state_preconditions | goal_preconditions:
+    for cond in pos_state_preconditions | neg_state_preconditions | \
+                goal_preconditions:
         for param, typ in cond.signature:
             new_params_dict[param] = typ
     for param, typ in new_operator.signature:
         new_params_dict[param] = typ
     new_params = sorted(new_params_dict.items())
 
-    return LDLRule(name, new_params, state_preconditions, goal_preconditions,
-                   new_operator)
+    return LDLRule(name, new_params, pos_state_preconditions,
+                   neg_state_preconditions, goal_preconditions, new_operator)
 
 
 def _prolog_transform(s: str) -> str:
@@ -378,6 +391,10 @@ def _get_prolog_domain_substitutions(
 
     for predicate in domain.predicates:
         predicate_subs[predicate] = _prolog_transform(predicate)
+        # Add negated versions too.
+        assert "negated_" not in predicate
+        predicate_subs["negated_" + predicate] = _prolog_transform("negated_" +
+                                                                   predicate)
 
     for operator in domain.actions:
         operator_subs[operator] = _prolog_transform(operator)
@@ -411,3 +428,10 @@ def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
     problem_str = problem_str.replace(" _ ", " - ")
 
     return Task(domain_str, problem_str)
+
+
+def _create_negated_predicate(fact: str, predicates: Dict[str,
+                                                          PyperplanPredicate]):
+    pred = utils.str_to_pred(fact, predicates)
+    pred.name = "negated_" + pred.name
+    return pred

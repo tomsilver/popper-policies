@@ -171,6 +171,34 @@ def pred_to_str(pred: PyperplanPredicate) -> str:
     return f"({pred.name} {arg_str})"
 
 
+def str_to_pred(
+        s: str, pred_library: Dict[str,
+                                   PyperplanPredicate]) -> PyperplanPredicate:
+    """Create a Pyperplan predicate (atom) from a string representation."""
+    assert s.startswith("(")
+    assert s.endswith(")")
+    s = s[1:-1]
+    name, remainder = s.split(" ", 1)
+    args = remainder.split(" ")
+    reference_pred = pred_library[name]
+    signature = reference_pred.signature
+    types = [t for _, t in signature]
+    assert len(args) == len(types)
+    new_signature = list(zip(args, types))
+    return PyperplanPredicate(name, new_signature)
+
+
+def pred_to_type_names(pred: PyperplanPredicate) -> Tuple[str]:
+    """Extract name names from predicate (atom)."""
+    names: List[str] = []
+    for _, t in pred.signature:
+        if isinstance(t, list):
+            names.append(t[0].name)
+        else:
+            names.append(t.name)
+    return tuple(names)
+
+
 def get_objects_str(task: Task, include_constants: bool = False) -> str:
     """Returns a PDDL encoding of the objects in the task."""
     # Create the objects string.
@@ -355,7 +383,8 @@ def query_ldl(ldl: LiftedDecisionList, atoms: Set[str],
     """
     for rule in ldl.rules:
         for ground_rule in all_ground_ldl_rules(rule, objects):
-            if ground_rule.state_preconditions.issubset(atoms) and \
+            if ground_rule.pos_state_preconditions.issubset(atoms) and \
+               not ground_rule.neg_state_preconditions & atoms and \
                ground_rule.goal_preconditions.issubset(goal):
                 return ground_rule.ground_operator
     return None

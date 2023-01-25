@@ -109,7 +109,8 @@ class LDLRule:
     """A lifted decision list rule."""
     name: str
     parameters: Sequence[Tuple[str, PyperplanType]]
-    state_preconditions: Set[PyperplanPredicate]
+    pos_state_preconditions: Set[PyperplanPredicate]
+    neg_state_preconditions: Set[PyperplanPredicate]
     goal_preconditions: Set[PyperplanPredicate]
     operator: PyperplanAction
 
@@ -122,10 +123,18 @@ class LDLRule:
         assert isinstance(objects, tuple)
         assert len(objects) == len(self.parameters)
         sub = {p: o for (p, _), o in zip(self.parameters, objects)}
-        pre_s = {_ground_atom(atom, sub) for atom in self.state_preconditions}
+        pre_ps = {
+            _ground_atom(atom, sub)
+            for atom in self.pos_state_preconditions
+        }
+        pre_ns = {
+            _ground_atom(atom, sub)
+            for atom in self.neg_state_preconditions
+        }
         pre_g = {_ground_atom(atom, sub) for atom in self.goal_preconditions}
         ground_op = _ground_operator(self.operator, sub)
-        return _GroundLDLRule(self, list(objects), pre_s, pre_g, ground_op)
+        return _GroundLDLRule(self, list(objects), pre_ps, pre_ns, pre_g,
+                              ground_op)
 
     @cached_property
     def _str(self) -> str:
@@ -137,7 +146,11 @@ class LDLRule:
             return f"({atom.name} {args_str})"
 
         inner_preconditions_strs = [
-            _atom_to_str(a) for a in sorted(self.state_preconditions)
+            _atom_to_str(a) for a in sorted(self.pos_state_preconditions)
+        ]
+        inner_preconditions_strs = [
+            "(not " + _atom_to_str(a) + ")"
+            for a in sorted(self.neg_state_preconditions)
         ]
         preconditions_str = " ".join(inner_preconditions_strs)
         if len(inner_preconditions_strs) > 1:
@@ -193,7 +206,8 @@ class _GroundLDLRule:
     """
     parent: LDLRule
     objects: Sequence[str]
-    state_preconditions: Set[PyperplanPredicate]
+    pos_state_preconditions: Set[PyperplanPredicate]
+    neg_state_preconditions: Set[PyperplanPredicate]
     goal_preconditions: Set[PyperplanPredicate]
     ground_operator: PyperplanAction
 
