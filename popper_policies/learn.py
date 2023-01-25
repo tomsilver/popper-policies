@@ -119,7 +119,10 @@ def _run_popper(kbpath: str) -> List:
     p.join()
     # End toggle for debugging.
 
-    return return_dict['prog']
+    prog = return_dict['prog']
+    if prog is None:
+        raise Exception("Popper failed to find a program.")
+    return prog
 
 
 def _run_popper_process(settings: PopperSettings,

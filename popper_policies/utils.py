@@ -290,8 +290,8 @@ def advance_task(task: Task, action: str) -> Task:
   (:init
   {init_str}
   )
-  (:goal
-  {goal_str}
+  (:goal (and
+  {goal_str})
   )
 )"""
     new_task = Task(task.domain_str, new_problem_str)
