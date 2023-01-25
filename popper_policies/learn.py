@@ -50,11 +50,21 @@ def learn_policy(domain_str: str, problem_strs: List[str],
     actions = sorted(action_set)
     logging.info(f"Found actions in plans: {actions}")
 
+    # Generate all possible ground actions for the sake of negative examples.
+    # We may want to subsample in the future because this could get very big.
+    all_ground_actions: Set[str] = set()
+    for task in tasks:
+        for op in task.pyperplan_task.operators:
+            all_ground_actions.add(op.name)
+
     # Convert the plans into state-goal-action triplets.
     demo_state_goal_actions = []
     for task, plan in zip(tasks, plan_strs):
         for state, goal, act in utils.plan_to_trajectory(task, plan):
             demo_state_goal_actions.append((state, goal, act))
+
+    # Won't need the tasks anymore.
+    del tasks
 
     # The background knowledge is constant across all actions.
     bk_str = _create_background_knowledge(demo_state_goal_actions)
@@ -84,8 +94,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
                 f.write(bk_str)
 
             # Create the examples (exs) file.
-            examples_str = _create_examples(demo_state_goal_actions, tasks,
-                                            action)
+            examples_str = _create_examples(demo_state_goal_actions,
+                                            all_ground_actions, action)
             logging.debug(f"Created examples string:\n{examples_str}")
             examples_file = temp_dir_path / "exs.pl"
             with open(examples_file, "w", encoding="utf-8") as f:
@@ -240,27 +250,23 @@ def _create_background_knowledge(
 
 
 def _create_examples(demo_state_goal_actions: List[StateGoalAction],
-                     tasks: List[Task], action: Tuple[str, int,
-                                                      Tuple[str, ...]]) -> str:
+                     all_ground_actions: Set[str],
+                     action: Tuple[str, int, Tuple[str, ...]]) -> str:
     """Returns the content of a Popper examples file.
 
     Currently makes the (often incorrect!) assumption that there is only
     one "good" action for each (state, goal), i.e., the demonstrated
     action. All other possible actions are treated as negative examples.
     """
-    # Generate all possible actions for the sake of negative examples.
-    # We may want to subsample in the future because this could get very big.
-    all_possible_actions = set()
-    for task in tasks:
-        for op in task.pyperplan_task.operators:
-            if not op.name.startswith(f"({action[0]}"):
-                continue
-            all_possible_actions.add(op.name)
-
     pos_strs: Set[str] = set()
     neg_strs: Set[str] = set()
+
+    all_matching_actions = {
+        a
+        for a in all_ground_actions if a.startswith(f"({action[0]}")
+    }
     for ex_id, (_, _, a) in enumerate(demo_state_goal_actions):
-        for other_action in all_possible_actions:
+        for other_action in all_matching_actions:
             # Positive example
             if a == other_action:
                 wrapper = "pos"
