@@ -22,8 +22,11 @@ from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
 _DomainSubstitutions = Tuple[Dict[str, str], Dict[str, str]]
 
 
-def learn_policy(domain_str: str, problem_strs: List[str],
-                 plan_strs: List[Plan]) -> LiftedDecisionList:
+def learn_policy(domain_str: str,
+                 problem_strs: List[str],
+                 plan_strs: List[Plan],
+                 popper_max_body: int = 10,
+                 popper_max_vars: int = 6) -> LiftedDecisionList:
     """Learn a goal-conditioned policy using Popper."""
     # Parse the PDDL.
     tasks = [Task(domain_str, prob_str) for prob_str in problem_strs]
@@ -92,7 +95,8 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             # Create the bias file.
             # NOTE: Prolog complains if we introduce an unused predicate, so
             # just collect seen predicates from the demos themselves.
-            bias_str = _create_bias(demo_state_goal_actions, action, domain)
+            bias_str = _create_bias(demo_state_goal_actions, action, domain,
+                                    popper_max_body, popper_max_vars)
             logging.debug(f"Created bias string:\n{bias_str}")
             bias_file = temp_dir_path / "bias.pl"
             with open(bias_file, "w", encoding="utf-8") as f:
@@ -152,7 +156,7 @@ def _run_popper_process(settings: PopperSettings,
 
 def _create_bias(state_action_goals: List[StateGoalAction],
                  action: Tuple[str, int, Tuple[str, ...]],
-                 domain: PyperplanDomain) -> str:
+                 domain: PyperplanDomain, max_body: int, max_vars: int) -> str:
     """Returns the content of a Popper bias file."""
     action_name, action_arity, action_types = action
 
@@ -209,7 +213,11 @@ def _create_bias(state_action_goals: List[StateGoalAction],
 
     preconditions_str = "\n".join(preconditions_strs)
 
-    return f"""% Predicates
+    return f"""% Set max bounds
+max_body({max_body}).
+max_vars({max_vars}).
+
+% Predicates
 {pred_str}
 
 % Goal predicates

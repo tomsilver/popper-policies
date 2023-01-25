@@ -15,6 +15,8 @@ def parse_flags() -> None:
     parser.add_argument("--num_eval_tasks", default=10, type=int)
     parser.add_argument("--horizon", default=100, type=int)
     parser.add_argument("--planner", default="pyperplan")
+    parser.add_argument("--popper_max_body", default=10, type=int)
+    parser.add_argument("--popper_max_vars", default=6, type=int)
     parser.add_argument('--debug',
                         action="store_const",
                         dest="loglevel",
