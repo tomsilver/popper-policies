@@ -80,7 +80,8 @@ class Task:
 # A plan is currently just a list of strings, where each string is one ground
 # operator, e.g., (unstack a b). We may change this later.
 Plan = List[str]
-StateGoalAction = Tuple[Set[PyperplanPredicate], Set[PyperplanPredicate], str]
+StateGoalAction = Tuple[Set[PyperplanPredicate], Set[PyperplanPredicate],
+                        Dict[PyperplanObject, PyperplanType], str]
 
 # Metrics are saved during evaluation.
 TaskMetrics = Dict[str, Any]

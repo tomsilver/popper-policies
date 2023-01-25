@@ -16,7 +16,8 @@ from popper.util import order_prog, order_rule
 
 from popper_policies import utils
 from popper_policies.structs import LDLRule, LiftedDecisionList, Plan, \
-    PyperplanDomain, PyperplanPredicate, StateGoalAction, Task
+    PyperplanDomain, PyperplanPredicate, PyperplanType, StateGoalAction, \
+    Task
 
 # Predicate substitutions, action substitutions.
 _DomainSubstitutions = Tuple[Dict[str, str], Dict[str, str]]
@@ -26,19 +27,22 @@ def learn_policy(domain_str: str,
                  problem_strs: List[str],
                  plan_strs: List[Plan],
                  popper_max_body: int = 10,
-                 popper_max_vars: int = 6) -> LiftedDecisionList:
+                 popper_max_vars: int = 6,
+                 planner_name: str = "pyperplan") -> LiftedDecisionList:
     """Learn a goal-conditioned policy using Popper."""
     # Parse the PDDL.
     tasks = [Task(domain_str, prob_str) for prob_str in problem_strs]
-    domain = tasks[0].domain
+    original_domain = tasks[0].domain
 
     # Since prolog is sensitive to syntax (e.g., no dashes in names), we need
     # to replace some predicate, action, and object names in the tasks. We will
     # invert these substitutions in the learned policies at the end. Note that
     # we don't need to store object name substitutions because objects won't
     # appear in the learned policies.
-    domain_substitutions = _get_prolog_domain_substitutions(domain)
+    domain_substitutions = _get_prolog_domain_substitutions(original_domain)
     tasks = [_prologify_task(t, domain_substitutions) for t in tasks]
+    domain = tasks[0].domain
+    domain_str = tasks[0].domain_str
 
     # Collect all actions seen in the plans; learn one program per action.
     # Actions are recorded with their names and arities.
@@ -48,7 +52,7 @@ def learn_policy(domain_str: str,
             assert ground_action.startswith("(")
             action_name, remainder = ground_action[1:].split(" ", 1)
             arity = len(remainder.split(" "))
-            signature = domain.actions[action_name].signature
+            signature = original_domain.actions[action_name].signature
             action_types = tuple(t[0].name for _, t in signature)
             action_set.add((action_name, arity, action_types))
     actions = sorted(action_set)
@@ -61,11 +65,11 @@ def learn_policy(domain_str: str,
         for op in task.pyperplan_task.operators:
             all_ground_actions.add(op.name)
 
-    # Convert the plans into state-goal-action triplets.
+    # Convert the plans into state-goal-object-action tuples.
     # Add in negated predicates.
     demo_state_goal_actions = []
     for task, plan in zip(tasks, plan_strs):
-        for state, goal, act in utils.plan_to_trajectory(task, plan):
+        for state, goal, objs, act in utils.plan_to_trajectory(task, plan):
             # Add negated facts to state.
             state_facts = {utils.pred_to_str(p) for p in state}
             for fact in task.pyperplan_task.facts:
@@ -73,7 +77,7 @@ def learn_policy(domain_str: str,
                     negated_pred = _create_negated_predicate(
                         fact, task.domain.predicates)
                     state.add(negated_pred)
-            demo_state_goal_actions.append((state, goal, act))
+            demo_state_goal_actions.append((state, goal, objs, act))
 
     # Won't need the tasks anymore.
     del tasks
@@ -109,7 +113,9 @@ def learn_policy(domain_str: str,
 
             # Create the examples (exs) file.
             examples_str = _create_examples(demo_state_goal_actions,
-                                            all_ground_actions, action)
+                                            all_ground_actions, action,
+                                            domain.name, domain_str,
+                                            planner_name)
             logging.debug(f"Created examples string:\n{examples_str}")
             examples_file = temp_dir_path / "exs.pl"
             with open(examples_file, "w", encoding="utf-8") as f:
@@ -120,7 +126,8 @@ def learn_policy(domain_str: str,
             programs.append(prog)
 
     # Invert the substitutions so that the policy matches the original domain.
-    policy = _popper_programs_to_policy(programs, domain, domain_substitutions)
+    policy = _popper_programs_to_policy(programs, original_domain,
+                                        domain_substitutions)
 
     return policy
 
@@ -163,7 +170,7 @@ def _create_bias(state_action_goals: List[StateGoalAction],
     # Collect all predicates with their names, arities, and types.
     predicates: Set[Tuple[str, int, Tuple[str, ...]]] = set()
     goal_predicates: Set[Tuple[str, int, Tuple[str, ...]]] = set()
-    for state, goal, _ in state_action_goals:
+    for state, goal, _, _ in state_action_goals:
         for atom in state:
             name = atom.name
             arity = len(atom.signature)
@@ -203,7 +210,7 @@ def _create_bias(state_action_goals: List[StateGoalAction],
         var_to_idx[v] = next(counter)
     var_to_idx["ex_id"] = next(counter)
     for precond in preconditions:
-        name = _prolog_transform(precond.name)
+        name = precond.name
         arity = len(precond.signature) + 1  # plus 1 for experiment id
         var_idxs = [var_to_idx[v] for v, _ in precond.signature]
         var_idxs += [var_to_idx["ex_id"]]
@@ -264,7 +271,7 @@ def _create_background_knowledge(
     # Prolog complains if the file is not organized by predicate.
     pred_to_strs: DefaultDict[Tuple[str, int], Set[str]] = defaultdict(set)
 
-    for example_id, (state, goal, _) in enumerate(demo_state_goal_actions):
+    for example_id, (state, goal, _, _) in enumerate(demo_state_goal_actions):
         for atom in state:
             name = atom.name
             arity = len(atom.signature)
@@ -292,12 +299,14 @@ def _create_background_knowledge(
 
 def _create_examples(demo_state_goal_actions: List[StateGoalAction],
                      all_ground_actions: Set[str],
-                     action: Tuple[str, int, Tuple[str, ...]]) -> str:
+                     action: Tuple[str, int, Tuple[str,
+                                                   ...]], domain_name: str,
+                     domain_str: str, planner_name: str) -> str:
     """Returns the content of a Popper examples file.
 
-    Currently makes the (often incorrect!) assumption that there is only
-    one "good" action for each (state, goal), i.e., the demonstrated
-    action. All other possible actions are treated as negative examples.
+    Detects and filters false negatives by planning for each possible
+    successor and checking to see if the result is worse than the
+    demonstration.
     """
     pos_strs: Set[str] = set()
     neg_strs: Set[str] = set()
@@ -306,7 +315,11 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
         a
         for a in all_ground_actions if a.startswith(f"({action[0]}")
     }
-    for ex_id, (_, _, a) in enumerate(demo_state_goal_actions):
+    for ex_id, (s, g, o, a) in enumerate(demo_state_goal_actions):
+        # Get the cost-to-go for this state.
+        demo_ctg = _get_cost_to_go(s, g, o, a, domain_name, domain_str,
+                                   planner_name)
+        assert demo_ctg < float("inf")
         for other_action in all_matching_actions:
             # Positive example
             if a == other_action:
@@ -314,6 +327,11 @@ def _create_examples(demo_state_goal_actions: List[StateGoalAction],
                 destination = pos_strs
             # Negative example
             else:
+                # Detect false negatives.
+                ctg = _get_cost_to_go(s, g, o, other_action, domain_name,
+                                      domain_str, planner_name)
+                if ctg <= demo_ctg:
+                    continue
                 wrapper = "neg"
                 destination = neg_strs
             prolog_str = _atom_str_to_prolog_str(other_action,
@@ -468,3 +486,44 @@ def _create_negated_predicate(fact: str, predicates: Dict[str,
     pred = utils.str_to_pred(fact, predicates)
     pred.name = "negated_" + pred.name
     return pred
+
+
+def _get_cost_to_go(state: Set[PyperplanPredicate],
+                    goal: Set[PyperplanPredicate],
+                    objects: Dict[str, PyperplanType], action: str,
+                    domain_name: str, domain_str: str,
+                    planner_name: str) -> float:
+    # Create a task.
+    objects_str = "\n  ".join([f"{o} - {t}" for o, t in objects.items()])
+    init_str = "\n  ".join([
+        utils.pred_to_str(p) for p in state
+        if not p.name.startswith("negated_")
+    ])
+    goal_str = "\n  ".join([utils.pred_to_str(p) for p in goal])
+    problem_str = f"""(define (problem synthetic-problem)
+   (:domain {domain_name})
+  (:objects
+  {objects_str}
+  )
+  (:init
+  {init_str}
+  )
+  (:goal (and
+  {goal_str})
+  )
+)"""
+    task = Task(domain_str, problem_str)
+
+    # If the action is invalid, treat as infinite cost to go.
+    if not utils.action_is_valid_for_task(task, action):
+        return float("inf")
+
+    # Advance via the action.
+    task = utils.advance_task(task, action)
+
+    # Plan to the goal.
+    plan, _ = utils.run_planning(task, planner=planner_name)
+    assert plan is not None, "Planning failed"
+
+    # Measure the cost.
+    return len(plan)

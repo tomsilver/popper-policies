@@ -298,7 +298,11 @@ def action_is_valid_for_task(task: Task, action: str) -> bool:
     """Check whether the action is valid in the task initial state."""
     pyperplan_task = task.pyperplan_task
     current_facts = pyperplan_task.initial_state
-    action_op = action_to_task_operator(task, action)
+    try:
+        action_op = action_to_task_operator(task, action)
+    except ValueError as e:
+        assert "Invalid action" in str(e)
+        return False
     return action_op.applicable(current_facts)
 
 
@@ -329,8 +333,9 @@ def advance_task(task: Task, action: str) -> Task:
 def plan_to_trajectory(task: Task, plan: Plan) -> Iterator[StateGoalAction]:
     """Iterate state-goal-action triplets by running the plan in the task."""
     goal = set(task.problem.goal)
+    objects = dict(task.problem.objects)
     for action in plan:
-        yield (set(task.problem.initial_state), goal, action)
+        yield (set(task.problem.initial_state), goal, objects, action)
         task = advance_task(task, action)
 
 

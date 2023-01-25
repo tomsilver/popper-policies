@@ -55,8 +55,12 @@ def _main() -> None:
         assert task.domain_str == domain_str
         problem_strs.append(task.problem_str)
         plan_strs.append(plan)
-    policy = learn_policy(domain_str, problem_strs, plan_strs,
-                          FLAGS.popper_max_body, FLAGS.popper_max_vars)
+    policy = learn_policy(domain_str,
+                          problem_strs,
+                          plan_strs,
+                          FLAGS.popper_max_body,
+                          FLAGS.popper_max_vars,
+                          planner_name=FLAGS.planner)
     logging.info(f"Learned policy:\n{policy}")
 
     # Evaluate the learned policy.
@@ -84,6 +88,8 @@ def _evaluate_policy(task: Task, policy: LiftedDecisionList) -> bool:
         act = utils.query_ldl(policy, state, objects, goal)
         logging.debug(f"Taking action: {act} from state: {state}")
         if act is None:
+            return False
+        if not utils.action_is_valid_for_task(task, act):
             return False
         task = utils.advance_task(task, act)
     return False
