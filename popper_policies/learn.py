@@ -224,7 +224,8 @@ head_pred({action_name},{action_arity+1}).
 % Example ID can only appear once
 :- clause(C), #count{{V : clause_var(C,V),var_type(C,V,ex_id)}} != 1.
 
-% Action preconditions
+% Action preconditions (and suppress ASP warning)
+#defined body_literal/4.
 {preconditions_str}
 """
 
