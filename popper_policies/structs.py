@@ -149,7 +149,7 @@ class LDLRule:
             _atom_to_str(a)
             for a in sorted(self.pos_state_preconditions, key=str)
         ]
-        inner_preconditions_strs = [
+        inner_preconditions_strs += [
             "(not " + _atom_to_str(a) + ")"
             for a in sorted(self.neg_state_preconditions, key=str)
         ]
