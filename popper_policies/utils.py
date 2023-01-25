@@ -188,7 +188,7 @@ def str_to_pred(
     return PyperplanPredicate(name, new_signature)
 
 
-def pred_to_type_names(pred: PyperplanPredicate) -> Tuple[str]:
+def pred_to_type_names(pred: PyperplanPredicate) -> Tuple[str, ...]:
     """Extract name names from predicate (atom)."""
     names: List[str] = []
     for _, t in pred.signature:

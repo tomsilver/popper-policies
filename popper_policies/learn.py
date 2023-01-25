@@ -1,5 +1,6 @@
 """Learn policies for PDDL domains using Popper (ILP system)."""
 
+import itertools
 import logging
 import multiprocessing
 import tempfile
@@ -91,7 +92,7 @@ def learn_policy(domain_str: str, problem_strs: List[str],
             # Create the bias file.
             # NOTE: Prolog complains if we introduce an unused predicate, so
             # just collect seen predicates from the demos themselves.
-            bias_str = _create_bias(demo_state_goal_actions, action)
+            bias_str = _create_bias(demo_state_goal_actions, action, domain)
             logging.debug(f"Created bias string:\n{bias_str}")
             bias_file = temp_dir_path / "bias.pl"
             with open(bias_file, "w", encoding="utf-8") as f:
@@ -150,7 +151,8 @@ def _run_popper_process(settings: PopperSettings,
 
 
 def _create_bias(state_action_goals: List[StateGoalAction],
-                 action: Tuple[str, int, Tuple[str, ...]]) -> str:
+                 action: Tuple[str, int, Tuple[str, ...]],
+                 domain: PyperplanDomain) -> str:
     """Returns the content of a Popper bias file."""
     action_name, action_arity, action_types = action
 
@@ -185,8 +187,27 @@ def _create_bias(state_action_goals: List[StateGoalAction],
     inner_str = ",".join(action_types)
     line = f"type({action_name},({inner_str},ex_id))."
     type_strs.add(line)
-
     type_str = "\n".join(type_strs)
+
+    # Add bias for operator preconditions.
+    preconditions_strs: Set[str] = set()
+    counter = itertools.count()
+    var_to_idx = {}
+    action_signature = domain.actions[action_name].signature
+    preconditions = domain.actions[action_name].precondition
+    for v, _ in action_signature:
+        var_to_idx[v] = next(counter)
+    var_to_idx["ex_id"] = next(counter)
+    for precond in preconditions:
+        name = _prolog_transform(precond.name)
+        arity = len(precond.signature) + 1  # plus 1 for experiment id
+        var_idxs = [var_to_idx[v] for v, _ in precond.signature]
+        var_idxs += [var_to_idx["ex_id"]]
+        var_str = ",".join(map(str, var_idxs))
+        precond_str = f":- not body_literal(0,{name},{arity},({var_str}))."
+        preconditions_strs.add(precond_str)
+
+    preconditions_str = "\n".join(preconditions_strs)
 
     return f"""% Predicates
 {pred_str}
@@ -202,6 +223,9 @@ head_pred({action_name},{action_arity+1}).
 
 % Example ID can only appear once
 :- clause(C), #count{{V : clause_var(C,V),var_type(C,V,ex_id)}} != 1.
+
+% Action preconditions
+{preconditions_str}
 """
 
 
