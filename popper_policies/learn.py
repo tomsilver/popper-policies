@@ -495,9 +495,9 @@ def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
     # Apply substitutions to domain.
     domain_str = task.domain_str
     for old, new in predicate_subs.items():
-        domain_str = domain_str.replace(old, new)
+        domain_str = _replace_in_pddl(domain_str, old, new)
     for old, new in operator_subs.items():
-        domain_str = domain_str.replace(old, new)
+        domain_str = _replace_in_pddl(domain_str, old, new)
     # This might break in some situations, need to be careful.
     domain_str = domain_str.replace("-", "_")
     domain_str = domain_str.replace(" _ ", " - ")
@@ -505,14 +505,22 @@ def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:
     # Apply substitutions to problem, and handle object names.
     problem_str = task.problem_str
     for old, new in predicate_subs.items():
-        problem_str = problem_str.replace(old, new)
+        problem_str = _replace_in_pddl(problem_str, old, new)
     for old, new in operator_subs.items():
-        problem_str = problem_str.replace(old, new)
+        problem_str = _replace_in_pddl(problem_str, old, new)
     # This might break in some situations, need to be careful.
     problem_str = problem_str.replace("-", "_")
     problem_str = problem_str.replace(" _ ", " - ")
 
     return Task(domain_str, problem_str)
+
+
+def _replace_in_pddl(pddl_str: str, old: str, new: str) -> str:
+    s = pddl_str.replace("(" + old + " ", "(" + new + " ")
+    s = s.replace(" " + old + " ", " " + new + " ")
+    s = s.replace(" " + old + "\n", " " + new + "\n")
+    s = s.replace(" " + old + ")", " " + new + ")")
+    return s
 
 
 def _create_negated_predicate(fact: str, predicates: Dict[str,
