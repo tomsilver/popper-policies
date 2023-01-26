@@ -44,6 +44,11 @@ def learn_policy(domain_str: str,
     domain = tasks[0].domain
     domain_str = tasks[0].domain_str
 
+    # Need to transform the plans also.
+    plan_strs = [[
+        _transform_action(act, domain_substitutions) for act in plan
+    ] for plan in plan_strs]
+
     # Collect all actions seen in the plans; learn one program per action.
     # Actions are recorded with their names and arities.
     action_set: Set[Tuple[str, int, Tuple[str, ...]]] = set()
@@ -52,7 +57,7 @@ def learn_policy(domain_str: str,
             assert ground_action.startswith("(")
             action_name, remainder = ground_action[1:].split(" ", 1)
             arity = len(remainder.split(" "))
-            signature = original_domain.actions[action_name].signature
+            signature = domain.actions[action_name].signature
             action_types = tuple(t[0].name for _, t in signature)
             action_set.add((action_name, arity, action_types))
     actions = sorted(action_set)
@@ -250,7 +255,12 @@ def _atom_str_to_prolog_str(atom_str: str,
                             wrapper: Optional[str] = None) -> str:
     """Reformat atom string to include the example id, and remove spaces."""
     assert atom_str.startswith("(")
-    name, remainder = atom_str[1:].split(" ", 1)
+    assert atom_str.endswith(")")
+    if " " not in atom_str:
+        name = atom_str[1:-1]
+        remainder = ")"
+    else:
+        name, remainder = atom_str[1:].split(" ", 1)
     s = f"{name}({remainder}"
     # Remove spaces.
     s = s.replace(" ", ",")
@@ -453,6 +463,15 @@ def _get_prolog_domain_substitutions(
     assert len(set(operator_subs.values())) == len(operator_subs)
 
     return (predicate_subs, operator_subs)
+
+
+def _transform_action(action: str, domain_subs: _DomainSubstitutions) -> str:
+    _, action_subs = domain_subs
+    assert action.startswith("(")
+    action_name, remainder = action[1:].split(" ", 1)
+    new_action_name = action_subs[action_name]
+    remainder = remainder.replace("-", "_")
+    return "(" + new_action_name + " " + remainder
 
 
 def _prologify_task(task: Task, domain_subs: _DomainSubstitutions) -> Task:

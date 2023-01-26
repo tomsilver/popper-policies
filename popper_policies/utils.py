@@ -207,13 +207,10 @@ def get_objects_str(task: Task, include_constants: bool = False) -> str:
         for t in task.domain.types.values()
     }
     for obj in sorted(task.problem.objects):
+        if obj in task.domain.constants and not include_constants:
+            continue
         obj_type = task.problem.objects[obj]
         type_to_objs[obj_type].append(obj)
-    # Include constants too.
-    if include_constants:
-        for obj in sorted(task.domain.constants):  # pragma: no cover
-            obj_type = task.domain.constants[obj]
-            type_to_objs[obj_type].append(obj)
     # Construct the object list for the prompt.
     objects_strs: List[str] = []
     for typ, objs in type_to_objs.items():
@@ -336,6 +333,7 @@ def plan_to_trajectory(task: Task, plan: Plan) -> Iterator[StateGoalAction]:
     objects = dict(task.problem.objects)
     for action in plan:
         yield (set(task.problem.initial_state), goal, objects, action)
+        assert action_is_valid_for_task(task, action)
         task = advance_task(task, action)
 
 
