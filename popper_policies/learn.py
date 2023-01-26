@@ -225,7 +225,10 @@ def _create_bias(state_action_goals: List[StateGoalAction],
         arity = len(precond.signature) + 1  # plus 1 for experiment id
         var_idxs = [var_to_idx[v] for v, _ in precond.signature]
         var_idxs += [var_to_idx["ex_id"]]
-        var_str = ",".join(map(str, var_idxs))
+        if len(var_idxs) == 1:
+            var_str = str(var_idxs[0]) + ","
+        else:
+            var_str = ",".join(map(str, var_idxs))
         precond_str = f":- not body_literal(0,{name},{arity},({var_str}))."
         preconditions_strs.add(precond_str)
 
