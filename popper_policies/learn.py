@@ -142,16 +142,16 @@ def _run_popper(kbpath: str) -> List:
     logging.debug("Calling popper.")
 
     # Toggle for debugging.
-    settings = PopperSettings(kbpath=kbpath, debug=True, explain=True)
-    return_dict = {}
-    _run_popper_process(settings, return_dict)
+    # settings = PopperSettings(kbpath=kbpath, debug=True, explain=True)
+    # return_dict = {}
+    # _run_popper_process(settings, return_dict)
     # See https://github.com/logic-and-learning-lab/Popper/issues/62
-    # settings = PopperSettings(kbpath=kbpath, explain=True)
-    # manager = multiprocessing.Manager()
-    # return_dict = manager.dict()
-    # p = Process(target=_run_popper_process, args=(settings, return_dict))
-    # p.start()
-    # p.join()
+    settings = PopperSettings(kbpath=kbpath, explain=True)
+    manager = multiprocessing.Manager()
+    return_dict = manager.dict()
+    p = Process(target=_run_popper_process, args=(settings, return_dict))
+    p.start()
+    p.join()
     # End toggle for debugging.
 
     prog = return_dict['prog']
