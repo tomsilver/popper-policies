@@ -429,3 +429,26 @@ def _(target: PyperplanAction, sub: Dict[str, str]) -> PyperplanAction:
     }
     return PyperplanAction(target.name, new_signature, new_preconds,
                            new_effects)
+
+
+@apply_substitution.register
+def _(target: LDLRule, sub: Dict[str, str]) -> PyperplanPredicate:
+    """Apply a substitution to a LDL rule."""
+    new_parameters = [(sub[old], t) for old, t in target.parameters]
+    new_pos_state_preconditions = {
+        apply_substitution(a, sub)
+        for a in target.pos_state_preconditions
+    }
+    new_neg_state_preconditions = {
+        apply_substitution(a, sub)
+        for a in target.neg_state_preconditions
+    }
+    new_goal_preconditions = {
+        apply_substitution(a, sub)
+        for a in target.goal_preconditions
+    }
+    new_operator = apply_substitution(target.operator, sub)
+
+    return LDLRule(target.name, new_parameters, new_pos_state_preconditions,
+                   new_neg_state_preconditions, new_goal_preconditions,
+                   new_operator)
