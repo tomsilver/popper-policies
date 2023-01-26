@@ -429,14 +429,17 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
         pred = domain.predicates[pred_name]
         orig_signature = pred.signature
         assert len(params) == len(orig_signature)
-        sub = {old: new for (old, _), new in zip(orig_signature, params)}
+        sub = {old: "?" + new for (old, _), new in zip(orig_signature, params)}
         new_pred = utils.apply_substitution(pred, sub)
         destination.add(new_pred)
 
     orig_operator = domain.actions[action_name]
     orig_signature = orig_operator.signature
     assert len(action_args) == len(orig_signature)
-    sub = {old: new for (old, _), new in zip(orig_signature, action_args)}
+    sub = {
+        old: "?" + new
+        for (old, _), new in zip(orig_signature, action_args)
+    }
     new_operator = utils.apply_substitution(orig_operator, sub)
 
     # Collect params from the other components.
