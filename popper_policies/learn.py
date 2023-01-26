@@ -197,11 +197,17 @@ def _create_bias(state_action_goals: List[StateGoalAction],
     # Add bias for types.
     type_strs: Set[str] = set()
     for name, _, types in predicates | goal_predicates:
-        inner_str = ",".join(types)
-        line = f"type({name},({inner_str},ex_id))."
+        if types:
+            inner_str = ",".join(types)
+            line = f"type({name},({inner_str},ex_id))."
+        else:
+            line = f"type({name},(ex_id))."
         type_strs.add(line)
-    inner_str = ",".join(action_types)
-    line = f"type({action_name},({inner_str},ex_id))."
+    if action_types:
+        inner_str = ",".join(action_types)
+        line = f"type({action_name},({inner_str},ex_id))."
+    else:
+        line = f"type({action_name},(ex_id))."
     type_strs.add(line)
     type_str = "\n".join(type_strs)
 
