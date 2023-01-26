@@ -186,12 +186,12 @@ def _create_bias(state_action_goals: List[StateGoalAction],
             name = atom.name
             arity = len(atom.signature)
             types = utils.pred_to_type_names(atom)
-            goal_predicates.add((name, arity, types))
+            goal_predicates.add((f"goal_{name}", arity, types))
 
     # Create predicate and goal predicate strings.
     pred_str = "\n".join(f"body_pred({name},{arity+1})."
                          for name, arity, _ in sorted(predicates))
-    goal_pred_str = "\n".join(f"body_pred(goal_{name},{arity+1})."
+    goal_pred_str = "\n".join(f"body_pred({name},{arity+1})."
                               for name, arity, _ in sorted(goal_predicates))
 
     # Add bias for types.
