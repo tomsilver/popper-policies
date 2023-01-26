@@ -262,7 +262,8 @@ def _atom_str_to_prolog_str(atom_str: str,
     """Reformat atom string to include the example id, and remove spaces."""
     assert atom_str.startswith("(")
     assert atom_str.endswith(")")
-    if " " not in atom_str:
+    num_args = atom_str.count(" ")
+    if num_args == 0:
         name = atom_str[1:-1]
         remainder = ")"
     else:
@@ -274,7 +275,10 @@ def _atom_str_to_prolog_str(atom_str: str,
     s = s.replace("-", "_")
     # Add task id.
     assert s.endswith(")")
-    s = f"{s[:-1]},{example_id})"
+    if num_args > 0:
+        s = f"{s[:-1]},{example_id})"
+    else:
+        s = f"{s[:-1]}{example_id})"
     if wrapper is not None:
         s = f"{wrapper}({s})"
     s += "."
