@@ -69,7 +69,10 @@ def _get_pddlgym_tasks(benchmark_name: str,
         test_suffix = "Test"
     else:
         test_suffix = ""
-    env_name = f"PDDLEnv{benchmark_name.capitalize()}{test_suffix}-v0"
+    if "searchandrescue" in benchmark_name.lower():
+        env_name = f"PDDL{benchmark_name}{test_suffix}-v0"
+    else:
+        env_name = f"PDDLEnv{benchmark_name.capitalize()}{test_suffix}-v0"
     env = pddlgym.make(env_name).unwrapped
     # Access the domain.
     domain_str = env.domain.domain
