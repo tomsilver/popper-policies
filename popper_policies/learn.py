@@ -451,7 +451,7 @@ def _create_ldl_rule(conditions: List[Tuple[str, List[str]]],
 
 
 def _prolog_transform(s: str) -> str:
-    return s.replace("-", "_")
+    return s.replace("-", "_").lower()
 
 
 def _get_prolog_domain_substitutions(
