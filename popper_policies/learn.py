@@ -551,7 +551,9 @@ def _get_cost_to_go(state: Set[PyperplanPredicate],
 
     # Plan to the goal.
     plan, _ = utils.run_planning(task, planner=planner_name)
-    assert plan is not None, "Planning failed"
+    if plan is None:
+        # Dead end.
+        return float("inf")
 
     # Measure the cost.
     return len(plan)
