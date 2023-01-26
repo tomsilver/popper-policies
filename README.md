@@ -11,7 +11,7 @@
 
 2. Clone this repository.
 3. In the cloned repository: `pip install -e .`
-4. Optional but recommended for speed: install Fast Downward as described below.
+4. Optional but recommended for speed: install Fast Downward as described below. If you do this, use `planner="fastdownward"` when you invoke `learn_policy()`.
     1. `git clone https://github.com/aibasel/downward.git`
     2) `cd downward && ./build.py`
     3) `export FD_EXEC_PATH="<your absolute path here>/downward"`
