@@ -178,8 +178,12 @@ def str_to_pred(
     assert s.startswith("(")
     assert s.endswith(")")
     s = s[1:-1]
-    name, remainder = s.split(" ", 1)
-    args = remainder.split(" ")
+    if " " in s:
+        name, remainder = s.split(" ", 1)
+        args = remainder.split(" ")
+    else:
+        name = s
+        args = []
     reference_pred = pred_library[name]
     signature = reference_pred.signature
     types = [t for _, t in signature]
