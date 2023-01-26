@@ -382,7 +382,6 @@ def _popper_programs_to_policy(
                 ]
                 conditions.append((pred_str, pred_arg_strs))
             rule = _create_ldl_rule(conditions, action, domain)
-            print(rule)
             policy_rules.append(rule)
     return LiftedDecisionList(policy_rules)
 
